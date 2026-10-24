@@ -2,7 +2,7 @@ import express from 'express';
 import {createServer} from 'node:http';
 import {initDB} from '../database.js';
 import * as controller from '../lib/runtimeController.js';
-import {logoutWhatsApp,sendText} from '../../../packages/whatsapp-engine/src/engine.js';
+import {logoutWhatsApp,sendText} from '../../../../packages/whatsapp-engine/src/engine.js';
 const app=express(),PORT=Number(process.env.PORT||3000),BIND=process.env.SKYWA_BIND||'127.0.0.1';
 app.use(express.json({limit:'1mb'}));
 app.get('/api/health',(_req,res)=>{const h=controller.getHealth();res.json({status:h.controller==='running'?'healthy':h.controller==='failed'?'degraded':'starting',version:process.version,uptime:Math.round(process.uptime()),server:'SKYWA WhatsApp Bot Studio',port:PORT,bind:BIND,database:initDB()?'connected':'disconnected',controller:h.controller,whatsapp:h.whatsapp,mode:'B-Termux-Companion'});});
