@@ -1,0 +1,16 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.skywa'
+    compileSdk 34
+    defaultConfig { applicationId 'com.skywa.app'; minSdk 24; targetSdk 34; versionCode 1; versionName "1.0" }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    buildTypes { debug { debuggable true }; release { minifyEnabled false; shrinkResources false; proguardFiles getDefaultProguardFile('proguard-android-optimize.txt') } }
+    sourceSets { main { java.srcDirs=['src/main/java','../native/android-runtime/src/main/java']; assets.srcDirs=['src/main/assets'] } }
+    buildFeatures { buildConfig true }
+}
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.activity:activity:1.8.2'
+    implementation 'androidx.webkit:webkit:1.11.0'
+    implementation 'com.google.android.material:material:1.11.0'
+}
