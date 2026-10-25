@@ -24,6 +24,9 @@ const metrics = {
 };
 const lastReplyAtByChat = new Map();
 const recentReplyTimes = [];
+const reservations = new Map();
+const reservedTokenByChat = new Map();
+let reservationSequence = 0;
 const MAX_TRACKED_CHATS = 2000;
 const MAX_RECENT_REPLIES = 2000;
 
@@ -137,16 +140,43 @@ export function checkAutomationAllowed(config, jid, now = Date.now()) {
   }
 
   const lastReply = lastReplyAtByChat.get(target);
-  if (lastReply !== undefined && current.cooldownSeconds > 0 && now - lastReply < current.cooldownSeconds * 1000) {
+  const pendingToken = reservedTokenByChat.get(target);
+  const pending = pendingToken === undefined ? null : reservations.get(pendingToken);
+  const latestReplyAt = Math.max(lastReply ?? -Infinity, pending?.timestamp ?? -Infinity);
+  if (latestReplyAt > -Infinity && current.cooldownSeconds > 0 && now - latestReplyAt < current.cooldownSeconds * 1000) {
     return {allowed: false, reason: 'chat-cooldown'};
   }
 
   while (recentReplyTimes.length && now - recentReplyTimes[0] >= 60_000) recentReplyTimes.shift();
-  if (recentReplyTimes.length >= current.maxRepliesPerMinute) return {allowed: false, reason: 'global-rate-limit'};
+  const pendingReplyCount = [...reservations.values()].filter(item => now - item.timestamp < 60_000).length;
+  if (recentReplyTimes.length + pendingReplyCount >= current.maxRepliesPerMinute) return {allowed: false, reason: 'global-rate-limit'};
   return {allowed: true, reason: 'ok'};
 }
 
-export function recordAutomationReply(jid, now = Date.now()) {
+export function isHelpOrResetCommand(command) {
+  return ['/help', '/start', '/reset'].includes(String(command ?? '').trim().toLowerCase());
+}
+
+export function reserveAutomationReply(config, jid, now = Date.now()) {
+  const gate = checkAutomationAllowed(config, jid, now);
+  if (!gate.allowed) return gate;
+  const target = String(jid ?? '').trim().toLowerCase();
+  const token = ++reservationSequence;
+  reservations.set(token, {jid:target, timestamp:now});
+  reservedTokenByChat.set(target, token);
+  return {allowed:true, reason:'reserved', token};
+}
+
+export function releaseAutomationReservation(token) {
+  const reservation = reservations.get(token);
+  if (!reservation) return false;
+  reservations.delete(token);
+  if (reservedTokenByChat.get(reservation.jid) === token) reservedTokenByChat.delete(reservation.jid);
+  return true;
+}
+
+export function recordAutomationReply(jid, now = Date.now(), reservationToken = null) {
+  if (reservationToken !== null) releaseAutomationReservation(reservationToken);
   const target = String(jid ?? '').trim().toLowerCase();
   if (!target) return;
   lastReplyAtByChat.delete(target);
@@ -188,4 +218,6 @@ export function resetAutomationStats() {
 export function resetAutomationGuardState() {
   lastReplyAtByChat.clear();
   recentReplyTimes.length = 0;
+  reservations.clear();
+  reservedTokenByChat.clear();
 }
