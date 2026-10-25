@@ -83,25 +83,37 @@ app.post('/api/whatsapp/logout', async (_req, res) => {
 app.get('/api/bot/config', (_req, res) => res.json(getAutoReplyConfig()));
 app.get('/api/automation/config', (_req, res) => res.json(getAutomationConfig()));
 app.post('/api/automation/config', (req, res) => {
+  const previous = getAutomationConfig();
   try {
     const config = setAutomationConfig(req.body || {});
-    saveSetting('automationConfig', config);
-    res.json({status:'saved', config});
+    if (!saveSetting('automationConfig', config)) {
+      setAutomationConfig(previous);
+      return res.status(500).json({status:'failed', error:'Gagal menyimpan konfigurasi ke penyimpanan lokal. Periksa ruang penyimpanan dan izin aplikasi, lalu coba lagi.'});
+    }
+    return res.json({status:'saved', config});
   } catch (error) {
-    res.status(400).json({status:'failed', error:error.message || 'Automation config invalid'});
+    return res.status(400).json({status:'failed', error:error.message || 'Automation config invalid'});
   }
 });
 app.get('/api/automation/stats', (_req, res) => res.json(getAutomationStats()));
 app.post('/api/automation/stats/reset', (_req, res) => res.json({status:'reset', stats:resetAutomationStats()}));
 app.post('/api/automation/pause', (_req, res) => {
-  const config = setAutomationConfig({...getAutomationConfig(), paused:true});
-  saveSetting('automationConfig', config);
-  res.json({status:'paused', config});
+  const previous = getAutomationConfig();
+  const config = setAutomationConfig({...previous, paused:true});
+  if (!saveSetting('automationConfig', config)) {
+    setAutomationConfig(previous);
+    return res.status(500).json({status:'failed', error:'Gagal menyimpan konfigurasi ke penyimpanan lokal. Periksa ruang penyimpanan dan izin aplikasi, lalu coba lagi.'});
+  }
+  return res.json({status:'paused', config});
 });
 app.post('/api/automation/resume', (_req, res) => {
-  const config = setAutomationConfig({...getAutomationConfig(), paused:false});
-  saveSetting('automationConfig', config);
-  res.json({status:'resumed', config});
+  const previous = getAutomationConfig();
+  const config = setAutomationConfig({...previous, paused:false});
+  if (!saveSetting('automationConfig', config)) {
+    setAutomationConfig(previous);
+    return res.status(500).json({status:'failed', error:'Gagal menyimpan konfigurasi ke penyimpanan lokal. Periksa ruang penyimpanan dan izin aplikasi, lalu coba lagi.'});
+  }
+  return res.json({status:'resumed', config});
 });
 app.post('/api/bot/config', (req, res) => {
   const body = req.body || {};
@@ -112,9 +124,13 @@ app.post('/api/bot/config', (req, res) => {
   const reply = (body.reply || '').trim();
   if (trigger.length > 200 || reply.length > 2000) return res.status(400).json({error:'trigger max is 200 characters and reply max is 2000 characters'});
   if (body.enabled === true && !reply) return res.status(400).json({error:'reply is required when auto-reply is enabled'});
+  const previous = getAutoReplyConfig();
   const config = setAutoReplyConfig({enabled:body.enabled === true, trigger, reply});
-  saveSetting('botConfig', config);
-  res.json({status:'saved', config});
+  if (!saveSetting('botConfig', config)) {
+    setAutoReplyConfig(previous);
+    return res.status(500).json({status:'failed', error:'Gagal menyimpan konfigurasi ke penyimpanan lokal. Periksa ruang penyimpanan dan izin aplikasi, lalu coba lagi.'});
+  }
+  return res.json({status:'saved', config});
 });
 
 app.get('/api/ai/config', (_req, res) => {
@@ -128,10 +144,12 @@ app.post('/api/ai/config', (req, res) => {
     const current = getAIConfig();
     const apiKey = typeof body.apiKey === 'string' && body.apiKey.trim() ? body.apiKey.trim() : current.apiKey;
     const config = normalizeAIConfig({...current, ...body, apiKey, hasApiKey:Boolean(apiKey)});
+    if (!saveSetting('aiConfig', config)) {
+      return res.status(500).json({status:'failed', error:'Gagal menyimpan konfigurasi ke penyimpanan lokal. Periksa ruang penyimpanan dan izin aplikasi, lalu coba lagi.'});
+    }
     setAIConfig(config);
-    saveSetting('aiConfig', config);
     const {apiKey:secret, ...safe} = config;
-    res.json({status:'saved', ...safe, hasApiKey:Boolean(secret)});
+    return res.json({status:'saved', ...safe, hasApiKey:Boolean(secret)});
   } catch (error) { res.status(400).json({status:'failed', error:error.message || 'AI config invalid'}); }
 });
 app.post('/api/ai/test', async (req, res) => {
