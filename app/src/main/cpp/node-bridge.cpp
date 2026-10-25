@@ -3,6 +3,7 @@
 
 #include <cerrno>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 #include <unistd.h>
@@ -58,14 +59,14 @@ Java_com_skywa_runtime_NodeRuntime_startNodeWithArguments(
     }
 
     std::vector<std::string> argumentStorage;
-    std::vector<char *> argv;
     argumentStorage.reserve(static_cast<size_t>(argumentCount));
-    argv.reserve(static_cast<size_t>(argumentCount) + 1);
+    size_t argumentBytes = 0;
 
     for (jsize index = 0; index < argumentCount; ++index) {
         auto value = static_cast<jstring>(env->GetObjectArrayElement(arguments, index));
         if (value == nullptr) {
             argumentStorage.emplace_back();
+            argumentBytes += 1;
             continue;
         }
 
@@ -76,12 +77,22 @@ Java_com_skywa_runtime_NodeRuntime_startNodeWithArguments(
         }
 
         argumentStorage.emplace_back(utfValue);
+        argumentBytes += argumentStorage.back().size() + 1;
         env->ReleaseStringUTFChars(value, utfValue);
         env->DeleteLocalRef(value);
     }
 
-    for (std::string &argument : argumentStorage) {
-        argv.push_back(argument.data());
+    // libuv may rewrite argv during Node bootstrap; Node's mobile samples
+    // therefore allocate the actual argument strings in one contiguous block.
+    std::vector<char> argumentBuffer(argumentBytes, '\\0');
+    std::vector<char *> argv;
+    argv.reserve(static_cast<size_t>(argumentCount) + 1);
+    size_t offset = 0;
+    for (const std::string &argument : argumentStorage) {
+        const size_t bytes = argument.size() + 1;
+        std::memcpy(argumentBuffer.data() + offset, argument.c_str(), bytes);
+        argv.push_back(argumentBuffer.data() + offset);
+        offset += bytes;
     }
     argv.push_back(nullptr);
 
