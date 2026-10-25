@@ -25,6 +25,7 @@ public final class NodeService extends Service {
     private static final String TAG = "SKYWA-NodeService";
     private static final String CHANNEL_ID = "skywa_embedded_runtime";
     private static final int NOTIFICATION_ID = 4201;
+    private static final String DIAGNOSTIC_FILE = "skywa-runtime-error.txt";
 
     private static volatile boolean runtimeStartedInProcess = false;
     private PowerManager.WakeLock wakeLock;
@@ -80,7 +81,18 @@ public final class NodeService extends Service {
         } catch (Throwable error) {
             runtimeStartedInProcess = false;
             Log.e(TAG, "Embedded Node.js could not start", error);
-            updateNotification("Runtime gagal mulai • periksa log diagnostik");
+            saveDiagnostic(error);
+            updateNotification("Runtime gagal mulai • SKYWA tetap bisa dibuka untuk diagnostik");
+        }
+    }
+
+    private void saveDiagnostic(Throwable error) {
+        try (FileOutputStream output = openFileOutput(DIAGNOSTIC_FILE, MODE_PRIVATE)) {
+            String report = error.getClass().getName() + ": " + String.valueOf(error.getMessage()) + "\\n";
+            for (StackTraceElement frame : error.getStackTrace()) report += " at " + frame.toString() + "\\n";
+            output.write(report.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException writeError) {
+            Log.e(TAG, "Could not save runtime diagnostic", writeError);
         }
     }
 
