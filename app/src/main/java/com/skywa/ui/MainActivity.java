@@ -26,10 +26,6 @@ import com.skywa.runtime.NodeService;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -988,58 +984,7 @@ public class MainActivity extends Activity {
     }
 
     private JSONObject apiRequest(String method, String path, JSONObject body) throws Exception {
-        HttpURLConnection connection = null;
-        try {
-            connection = (HttpURLConnection) new URL(API_BASE + path).openConnection();
-            connection.setRequestMethod(method);
-            connection.setConnectTimeout(4000);
-            connection.setReadTimeout(15000);
-            connection.setRequestProperty("Accept", "application/json");
-            if (body != null) {
-                connection.setDoOutput(true);
-                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-                byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
-                try (OutputStream output = connection.getOutputStream()) {
-                    output.write(payload);
-                }
-            }
-            int status = connection.getResponseCode();
-            InputStream stream = status >= 200 && status < 400 ? connection.getInputStream() : connection.getErrorStream();
-            String raw = stream == null ? "" : readString(stream);
-            if (status < 200 || status >= 300) {
-                String detail = "";
-                try {
-                    JSONObject errorJson = new JSONObject(raw);
-                    detail = errorJson.optString("error", errorJson.optString("message", ""));
-                } catch (JSONException ignored) {
-                    // Express 404 pages are HTML, not machine-readable API errors.
-                }
-                if (detail.isEmpty()) {
-                    if (status == 404 || raw.toLowerCase(java.util.Locale.ROOT).contains("<!doctype html")) {
-                        detail = "API runtime tidak cocok atau masih memakai bundle lama. Pasang APK terbaru, lalu Paksa berhenti SKYWA dan buka kembali agar bundle diperbarui.";
-                    } else {
-                        detail = "Server lokal mengembalikan HTTP " + status + ".";
-                    }
-                }
-                throw new IOException("HTTP " + status + ": " + detail);
-            }
-            try {
-                return raw.isEmpty() ? new JSONObject() : new JSONObject(raw);
-            } catch (JSONException parseError) {
-                throw new IOException("Respons runtime bukan JSON. Coba Paksa berhenti SKYWA, buka ulang, lalu refresh status.");
-            }
-        } finally {
-            if (connection != null) connection.disconnect();
-        }
-    }
-
-    private String readString(InputStream input) throws IOException {
-        try (InputStream stream = input; ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-            byte[] buffer = new byte[4096];
-            int count;
-            while ((count = stream.read(buffer)) != -1) output.write(buffer, 0, count);
-            return output.toString(StandardCharsets.UTF_8.name());
-        }
+        return com.skywa.runtime.LocalApiClient.request(this, method, path, body);
     }
 
     private String safeMessage(Exception error) {
