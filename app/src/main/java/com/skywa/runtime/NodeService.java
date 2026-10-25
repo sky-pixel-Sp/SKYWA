@@ -156,7 +156,7 @@ public final class NodeService extends Service {
     }
 
     private String readBundledBundleVersion() throws IOException {
-        try (InputStream input = getAssets().open("nodejs-project/.skywa-bundle-version");
+        try (InputStream input = getAssets().open("nodejs-project/skywa-bundle-version.txt");
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[256];
             int count;

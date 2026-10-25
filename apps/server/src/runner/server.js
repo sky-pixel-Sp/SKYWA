@@ -41,13 +41,13 @@ app.get('/api/build', async (_req, res) => {
   let appVersion = 'unknown';
   let appVersionCode = null;
   try {
-    bundleVersion = (await readFile(path.resolve(process.cwd(), '.skywa-bundle-version'), 'utf8')).trim() || 'unknown';
+    bundleVersion = (await readFile(path.resolve(process.cwd(), 'skywa-bundle-version.txt'), 'utf8')).trim() || 'unknown';
   } catch (_) {
     // A source checkout may not have a staged runtime fingerprint.
   }
   try {
-    appVersion = (await readFile(path.resolve(process.cwd(), '.skywa-app-version'), 'utf8')).trim() || 'unknown';
-    const codeText = (await readFile(path.resolve(process.cwd(), '.skywa-app-version-code'), 'utf8')).trim();
+    appVersion = (await readFile(path.resolve(process.cwd(), 'skywa-app-version.txt'), 'utf8')).trim() || 'unknown';
+    const codeText = (await readFile(path.resolve(process.cwd(), 'skywa-app-version-code.txt'), 'utf8')).trim();
     appVersionCode = /^\d+$/.test(codeText) ? Number(codeText) : null;
   } catch (_) {
     // A source checkout may not have Android build metadata staged.

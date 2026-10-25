@@ -114,9 +114,9 @@ if [[ -z "$APP_VERSION_NAME" || ! "$APP_VERSION_CODE" =~ ^[0-9]+$ ]]; then
   echo "ERROR: could not read versionName/versionCode from app/build.gradle." >&2
   exit 1
 fi
-printf '%s\n' "$BUNDLE_VERSION" > "$APP_ASSETS/.skywa-bundle-version"
-printf '%s\n' "$APP_VERSION_NAME" > "$APP_ASSETS/.skywa-app-version"
-printf '%s\n' "$APP_VERSION_CODE" > "$APP_ASSETS/.skywa-app-version-code"
+printf '%s\n' "$BUNDLE_VERSION" > "$APP_ASSETS/skywa-bundle-version.txt"
+printf '%s\n' "$APP_VERSION_NAME" > "$APP_ASSETS/skywa-app-version.txt"
+printf '%s\n' "$APP_VERSION_CODE" > "$APP_ASSETS/skywa-app-version-code.txt"
 
 echo "Android app version: $APP_VERSION_NAME ($APP_VERSION_CODE)"
 echo "Embedded Node.js runtime: ${RUNTIME_VERSION} (SHA-256 verified)"
