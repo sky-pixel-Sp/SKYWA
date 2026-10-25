@@ -1,7 +1,7 @@
 name: SKYWA CI — tests and Android debug APK
 on:
   push:
-    branches: [main, master, "ci/**"]
+    branches: [main, master, "ci/**", "feat/standalone-android-runtime"]
   pull_request:
   workflow_dispatch:
 permissions:
@@ -76,7 +76,7 @@ jobs:
 
   publish-release:
     name: Publish APK download on main
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/standalone-android-runtime')
     needs: verify-and-build
     runs-on: ubuntu-latest
     permissions:
