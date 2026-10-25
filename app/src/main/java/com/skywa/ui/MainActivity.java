@@ -15,6 +15,7 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ImageView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -81,11 +82,18 @@ public class MainActivity extends Activity {
         scroll.addView(page);
         setContentView(scroll);
 
+        ImageView brandArt = new ImageView(this);
+        brandArt.setImageResource(com.skywa.R.drawable.skywa_logo);
+        brandArt.setContentDescription("SKYWA logo");
+        LinearLayout.LayoutParams artParams = new LinearLayout.LayoutParams(dp(76), dp(76));
+        artParams.bottomMargin = dp(12);
+        page.addView(brandArt, artParams);
         TextView eyebrow = addText(page, "WHATSAPP AUTOMATION • ANDROID NATIVE", 11, ACCENT, true);
         eyebrow.setLetterSpacing(0.08f);
         addText(page, "SKYWA", 34, WHITE, true);
         addText(page, "Bot Studio", 18, MUTED, false);
         addText(page, "Server Node.js dan mesin WhatsApp berjalan langsung di dalam aplikasi SKYWA.", 14, MUTED, false);
+        addButton(page, "PENGATURAN AI • OPENROUTER / LOKAL", ACCENT, () -> startActivity(new Intent(this, AISettingsActivity.class)));
         addGap(page, 10);
 
         LinearLayout statusCard = addCard("STATUS SISTEM");
