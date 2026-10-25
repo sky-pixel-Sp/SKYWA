@@ -37,6 +37,7 @@ for required in \
   "assets/nodejs-project/apps/server/src/runner/server.js" \
   "assets/nodejs-project/packages/whatsapp-engine/src/engine.js" \
   "assets/nodejs-project/skywa-app-version.txt" \
+  "assets/nodejs-project/skywa-bundle-version.txt" \
   "assets/nodejs-project/skywa-app-version-code.txt" \
   "assets/nodejs-project/node_modules/@whiskeysockets/baileys/lib/index.js"; do
   if ! grep -Fxq "$required" <<<"$entries"; then
