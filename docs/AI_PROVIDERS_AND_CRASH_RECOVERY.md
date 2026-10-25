@@ -1,7 +1,7 @@
 # SKYWA Android: crash recovery and AI providers
 
 ## AI modes
-- **OpenRouter**: enter an OpenRouter API key and a model ID such as `openai/gpt-4o-mini`. The key is stored only in the app-private runtime database and is never returned by the settings API.
+- **OpenRouter**: enter an OpenRouter API key and a model ID such as `openai/gpt-4o-mini`. The key is stored only in the app-private runtime database and is never returned by the settings API. Note: the database value is currently plaintext at rest; Android Keystore-backed encryption remains a required follow-up before treating this as production-grade secret storage.
 - **Local endpoint**: enter an OpenAI-compatible local server URL, for example `http://127.0.0.1:11434/v1`, and a model name served by it. This mode sends requests to that endpoint, not to OpenRouter. It is genuinely offline only when the local model server and model weights are already running/available on the device. This APK does not bundle multi-gigabyte model weights.
 - AI auto-reply is opt-in. It only handles incoming text when enabled; the test action sends a prompt to the provider but never sends a WhatsApp message.
 - Use a dedicated low-cost model, set a clear system prompt, and avoid enabling replies in sensitive group chats without testing.
