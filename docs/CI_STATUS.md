@@ -1,9 +1,9 @@
 # SKYWA CI and source status
 
-This branch reconstructs key source files from the available SKYWA-CI-Ready archive through GitHub's file API. This is not a byte-for-byte import of the full ZIP archive.
+The Android app now contains a native control panel for the local Termux backend. The backend exposes health/status, WhatsApp pairing, send-message and basic auto-reply configuration endpoints.
 
-The Actions workflow installs Node dependencies, runs syntax checks and unit tests, builds a debug APK, and verifies its package metadata. Check the Actions tab for a real run before claiming success.
+CI checks JavaScript syntax and unit tests, assembles a debug APK, and verifies the APK's package ID before uploading the artifact. Always check the current Actions run; the existence of this workflow is not proof that a build succeeded.
 
-Known gap: the Android WebView expects app/src/main/assets/www/index.html, which was absent from the source archive. Frontend build output and Android-to-Termux integration need further work. No live WhatsApp pairing or delivery test is claimed.
+Known limitations: a live WhatsApp pairing and message delivery have not been run by CI. APK installation, Android-to-Termux loopback communication, and background behavior must still be tested on the target phone. The project source is a reconstruction of the key files, not a byte-for-byte import of the original ZIP.
 
-Never commit .env files, session credentials, API keys, or WhatsApp auth state.
+Never commit .env files, WhatsApp session credentials, API keys, or session/auth-state directories.
