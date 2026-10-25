@@ -1,6 +1,7 @@
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import pino from 'pino';
-import {generateAIReply, normalizeAIConfig} from './ai-provider.js';\nimport {normalizeAutomationConfig, findAutomationRule, checkAutomationAllowed, recordAutomationReply, recordAutomationEvent, getAutomationStats, resetAutomationStats} from './automation.js';
+import {generateAIReply, normalizeAIConfig} from './ai-provider.js';
+import {normalizeAutomationConfig, findAutomationRule, checkAutomationAllowed, recordAutomationReply, recordAutomationEvent, getAutomationStats, resetAutomationStats} from './automation.js';
 
 const logger = pino({level:'info'});
 export const ConnectionState = {

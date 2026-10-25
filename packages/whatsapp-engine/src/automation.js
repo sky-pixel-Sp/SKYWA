@@ -28,7 +28,7 @@ const MAX_TRACKED_CHATS = 2000;
 const MAX_RECENT_REPLIES = 2000;
 
 function listValues(value) {
-  const values = Array.isArray(value) ? value : typeof value === 'string' ? value.split(/[;,\\n\\r]+/) : [];
+  const values = Array.isArray(value) ? value : typeof value === 'string' ? value.split(/[;,\n\r]+/) : [];
   return [...new Set(values.map(item => String(item ?? '').trim()).filter(Boolean))].slice(0, 500);
 }
 
@@ -36,13 +36,13 @@ function normalizeIdentifier(value) {
   const text = String(value ?? '').trim().toLowerCase();
   if (!text) return '';
   if (text.includes('@')) return text;
-  const digits = text.replace(/\\D/g, '');
+  const digits = text.replace(/\D/g, '');
   return digits.length >= 3 ? digits : '';
 }
 
 function validTime(value, fallback) {
   const text = typeof value === 'string' ? value.trim() : '';
-  return /^(?:[01]\\d|2[0-3]):[0-5]\\d$/.test(text) ? text : fallback;
+  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(text) ? text : fallback;
 }
 
 export function normalizeAutomationConfig(input = {}) {
@@ -84,7 +84,7 @@ export function normalizeAutomationConfig(input = {}) {
 }
 
 function phoneFromJid(jid) {
-  return String(jid ?? '').split('@')[0].split(':')[0].replace(/\\D/g, '');
+  return String(jid ?? '').split('@')[0].split(':')[0].replace(/\D/g, '');
 }
 
 function listHasJid(list, jid) {

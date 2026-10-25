@@ -45,7 +45,11 @@ describe('SKYWA WhatsApp engine', () => {
     assert.equal(saved.rulesEnabled, true);
     assert.equal(saved.rules.length, 1);
     assert.deepEqual(saved.rules[0].keywords, ['harga', 'price']);
-    engine.setAutomationConfig({});
+    engine.setAutomationConfig({
+      rulesEnabled:false, paused:false, ignoreGroups:true, allowlist:[], blocklist:[],
+      cooldownSeconds:10, maxRepliesPerMinute:8, activeHoursEnabled:false,
+      activeStart:'08:00', activeEnd:'21:00', rules:[]
+    });
   });
 
   test('auto-reply is off by default and validates enabled config', () => {

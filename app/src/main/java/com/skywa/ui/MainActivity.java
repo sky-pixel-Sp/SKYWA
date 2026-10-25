@@ -413,7 +413,7 @@ public class MainActivity extends Activity {
         for (int i = 0; i < rules.length(); i++) {
             JSONObject rule = rules.optJSONObject(i);
             if (rule == null) continue;
-            if (i > 0) output.append('\\n');
+            if (i > 0) output.append('\n');
             String mode = rule.optString("matchType", "contains");
             output.append(mode).append(": ");
             org.json.JSONArray keywords = rule.optJSONArray("keywords");
@@ -432,7 +432,7 @@ public class MainActivity extends Activity {
         if (values == null) return "";
         StringBuilder output = new StringBuilder();
         for (int i = 0; i < values.length(); i++) {
-            if (i > 0) output.append('\\n');
+            if (i > 0) output.append('\n');
             output.append(values.optString(i, ""));
         }
         return output.toString();
@@ -613,12 +613,12 @@ public class MainActivity extends Activity {
                         if (finalAdvancedStats != null) {
                             automationStats.setText("Pesan teks masuk: " + finalAdvancedStats.optInt("received", 0)
                                 + " • Terfilter: " + finalAdvancedStats.optInt("filtered", 0)
-                                + "\\nBalasan rule: " + finalAdvancedStats.optInt("rulesReplied", 0)
+                                + "\nBalasan rule: " + finalAdvancedStats.optInt("rulesReplied", 0)
                                 + " • Balasan statis: " + finalAdvancedStats.optInt("staticReplied", 0)
-                                + "\\nBalasan AI: " + finalAdvancedStats.optInt("aiReplied", 0)
+                                + "\nBalasan AI: " + finalAdvancedStats.optInt("aiReplied", 0)
                                 + " • Gagal: " + finalAdvancedStats.optInt("failures", 0)
-                                + "\\nBalasan dalam 60 detik: " + finalAdvancedStats.optInt("repliesLastMinute", 0)
-                                + (finalAdvancedConfig != null && finalAdvancedConfig.optBoolean("paused", false) ? "\\nSTATUS: DIJEDA" : ""));
+                                + "\nBalasan dalam 60 detik: " + finalAdvancedStats.optInt("repliesLastMinute", 0)
+                                + (finalAdvancedConfig != null && finalAdvancedConfig.optBoolean("paused", false) ? "\nSTATUS: DIJEDA" : ""));
                         }
                     }
                 } finally {
