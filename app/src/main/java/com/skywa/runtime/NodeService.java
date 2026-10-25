@@ -88,7 +88,8 @@ public final class NodeService extends Service {
                     apiToken);
             runtimeStartedInProcess = false;
             Log.e(TAG, "Embedded Node.js exited with code " + result);
-            updateNotification("Runtime berhenti (kode " + result + ") • buka ulang SKYWA");
+            saveDiagnostic("Node.js keluar dengan kode " + result + "\nPeriksa argumen runtime, port, dan log perangkat.");
+            updateNotification("Runtime berhenti (kode " + result + ") • buka SKYWA untuk diagnostik");
         } catch (Throwable error) {
             runtimeStartedInProcess = false;
             Log.e(TAG, "Embedded Node.js could not start", error);
@@ -99,8 +100,8 @@ public final class NodeService extends Service {
 
     private void saveDiagnostic(Throwable error) {
         try (FileOutputStream output = openFileOutput(DIAGNOSTIC_FILE, MODE_PRIVATE)) {
-            String report = error.getClass().getName() + ": " + String.valueOf(error.getMessage()) + "\\n";
-            for (StackTraceElement frame : error.getStackTrace()) report += " at " + frame.toString() + "\\n";
+            String report = error.getClass().getName() + ": " + String.valueOf(error.getMessage()) + "\n";
+            for (StackTraceElement frame : error.getStackTrace()) report += " at " + frame.toString() + "\n";
             output.write(report.getBytes(StandardCharsets.UTF_8));
         } catch (IOException writeError) {
             Log.e(TAG, "Could not save runtime diagnostic", writeError);

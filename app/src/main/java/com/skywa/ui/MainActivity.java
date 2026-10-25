@@ -151,6 +151,8 @@ public class MainActivity extends Activity {
         serverToggleButton = addButton(statusCard, "NYALAKAN SERVER", ACCENT, this::toggleEmbeddedServer);
         addButton(statusCard, "PERIKSA STATUS", 0xFF293954, this::refreshStatus);
         buildInfoStatus = addText(statusCard, "Versi runtime: memeriksa…", 11, MUTED, false);
+        addButton(statusCard, "DIAGNOSTIK RUNTIME", 0xFF34425C, this::showRuntimeDiagnostics);
+        addButton(statusCard, "SALIN LAPORAN DIAGNOSTIK", 0xFF34425C, this::copyRuntimeDiagnostics);
         homeWhatsAppStatus = addText(activeSection, "WhatsApp • memeriksa status…", 14, WHITE, true);
 
         addText(activeSection, "Urutan mudah: 1) Nyalakan server  2) Hubungkan WhatsApp  3) Atur AI atau balasan.", 12, MUTED, false);
@@ -439,7 +441,7 @@ public class MainActivity extends Activity {
                 actionStatus.setTextColor(RED);
                 refreshStatus();
             }
-        }, 15000);
+        }, 60000);
     }
 
     private void stopEmbeddedServer() {
@@ -491,6 +493,47 @@ public class MainActivity extends Activity {
             serverToggleButton.setText("NYALAKAN SERVER");
             serverToggleButton.setEnabled(true);
             serverToggleButton.setBackground(rounded(ACCENT, ACCENT, 11));
+        }
+    }
+
+    private String readRuntimeDiagnostic() {
+        StringBuilder report = new StringBuilder();
+        try (java.io.InputStream input = openFileInput("skywa-runtime-error.txt");
+             java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
+            byte[] buffer = new byte[2048];
+            int count;
+            while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+            report.append(output.toString(StandardCharsets.UTF_8.name()));
+        } catch (Exception ignored) {
+            report.append("Belum ada detail error yang tersimpan. Runtime mungkin masih menyalin bundle atau keluar tanpa exception Java.");
+        }
+        // Keep diagnostic exports safe: redact likely tokens, API keys and phone numbers.
+        String safe = report.toString()
+                .replaceAll("(?i)(x-skywa-token\\s*[:=]\\s*)[^\\s,;]+", "$1[REDACTED]")
+                .replaceAll("(?i)(api[_ -]?key\\s*[:=]\\s*)[^\\s,;]+", "$1[REDACTED]")
+                .replaceAll("(?<![A-Za-z0-9])(?:\\+?\\d[\\d -]{8,16}\\d)(?![A-Za-z0-9])", "[PHONE REDACTED]");
+        return "SKYWA Runtime Diagnostics\n"
+                + "App version: " + com.skywa.BuildConfig.VERSION_NAME + " (" + com.skywa.BuildConfig.VERSION_CODE + ")\n"
+                + "API port: 127.0.0.1:3000\n"
+                + "State: " + (runtimeOnline ? "ACTIVE" : serverTransition.isEmpty() ? "NOT CONFIRMED" : serverTransition) + "\n\n"
+                + safe;
+    }
+
+    private void showRuntimeDiagnostics() {
+        new AlertDialog.Builder(this)
+                .setTitle("Diagnostik Runtime")
+                .setMessage(readRuntimeDiagnostic())
+                .setPositiveButton("TUTUP", (dialog, which) -> dialog.dismiss())
+                .setNeutralButton("SALIN LAPORAN", (dialog, which) -> copyRuntimeDiagnostics())
+                .show();
+    }
+
+    private void copyRuntimeDiagnostics() {
+        android.content.ClipboardManager clipboard = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (clipboard != null) {
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("SKYWA Runtime Diagnostics", readRuntimeDiagnostic()));
+            actionStatus.setText("Laporan diagnostik disalin dengan data sensitif disamarkan.");
+            actionStatus.setTextColor(GREEN);
         }
     }
 
