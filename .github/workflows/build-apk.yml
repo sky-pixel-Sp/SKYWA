@@ -22,7 +22,7 @@ jobs:
           java-version: '17'
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Install engine dependencies
         working-directory: packages/whatsapp-engine
         run: npm install --no-audit --no-fund
@@ -40,7 +40,9 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses
       - name: Install Android SDK components
-        run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+        run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "cmake;3.22.1" "ndk;27.3.13750724"
+      - name: Prepare embedded Node.js runtime and production bot bundle
+        run: bash scripts/prepare-standalone-android.sh
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
@@ -96,7 +98,7 @@ jobs:
           body: |
             Automatically built APK from a successful syntax, unit-test, Android build and package-metadata verification run.
             
-            This is a debug preview. Pairing and message delivery must still be tested on a real Android device with the Termux backend.
+            This is a debug APK containing the embedded Node.js runtime and local SKYWA backend. WhatsApp pairing, message delivery, background behavior, and session persistence must still be tested on a real Android device.
           prerelease: true
           make_latest: false
           fail_on_unmatched_files: true
