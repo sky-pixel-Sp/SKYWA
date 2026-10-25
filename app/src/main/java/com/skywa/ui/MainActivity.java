@@ -203,8 +203,7 @@ public class MainActivity extends Activity {
         automationEndInput = addInput(automationCard, "Jam selesai format 24 jam, contoh 21:00", false);
         automationAllowlistInput = addInput(automationCard, "Whitelist nomor/JID (opsional, pisahkan koma/baris baru)", true);
         automationBlocklistInput = addInput(automationCard, "Blacklist nomor/JID (opsional, pisahkan koma/baris baru)", true);
-        automationRulesInput = addInput(automationCard, "Aturan per baris: contains: halo => Halo!
-exact: harga => Silakan sebut produk.\\nstartsWith: order => Kirim nomor pesanan.", true);
+        automationRulesInput = addInput(automationCard, "Aturan per baris: contains: halo => Halo!\nexact: harga => Silakan sebut produk.\nstartsWith: order => Kirim nomor pesanan.", true);
         addButton(automationCard, "SIMPAN AUTOMATION PRO", ACCENT, this::saveAutomation);
         automationStats = addText(automationCard, "Statistik otomatisasi: memuat…", 12, MUTED, false);
         addButton(automationCard, "JEDA SEMUA BALASAN OTOMATIS", 0xFF34425C, this::pauseAutomation);
