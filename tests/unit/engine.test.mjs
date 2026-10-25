@@ -17,7 +17,7 @@ describe('SKYWA WhatsApp engine', () => {
   });
 
   test('exports lifecycle functions', () => {
-    for (const key of ['startWhatsApp','stopWhatsApp','logoutWhatsApp','getSock','sendMessage','sendText','setState','getAutoReplyConfig','setAutoReplyConfig']) {
+    for (const key of ['startWhatsApp','stopWhatsApp','logoutWhatsApp','getSock','sendMessage','sendText','setState','getAutoReplyConfig','setAutoReplyConfig','getAutomationConfig','setAutomationConfig','getAutomationStats','resetAutomationStats']) {
       assert.equal(typeof engine[key], 'function');
     }
   });
@@ -29,6 +29,23 @@ describe('SKYWA WhatsApp engine', () => {
   test('validates recipient and text', async () => {
     await assert.rejects(() => engine.sendText('', 'hello'), /jid/);
     await assert.rejects(() => engine.sendText('123@s.whatsapp.net', ' '), /text/);
+  });
+
+  test('automation guardrails default to safe settings and validate rule sets', () => {
+    const defaults = engine.getAutomationConfig();
+    assert.equal(defaults.rulesEnabled, false);
+    assert.equal(defaults.ignoreGroups, true);
+    assert.equal(defaults.cooldownSeconds, 10);
+    const saved = engine.setAutomationConfig({
+      rulesEnabled: true,
+      rules: [{id:'price', matchType:'contains', keywords:['harga', 'price'], reply:'Silakan sebut produk.'}],
+      cooldownSeconds: 12,
+      maxRepliesPerMinute: 5
+    });
+    assert.equal(saved.rulesEnabled, true);
+    assert.equal(saved.rules.length, 1);
+    assert.deepEqual(saved.rules[0].keywords, ['harga', 'price']);
+    engine.setAutomationConfig({});
   });
 
   test('auto-reply is off by default and validates enabled config', () => {

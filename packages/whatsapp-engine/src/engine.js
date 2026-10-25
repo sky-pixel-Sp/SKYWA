@@ -1,6 +1,6 @@
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import pino from 'pino';
-import {generateAIReply, normalizeAIConfig} from './ai-provider.js';
+import {generateAIReply, normalizeAIConfig} from './ai-provider.js';\nimport {normalizeAutomationConfig, findAutomationRule, checkAutomationAllowed, recordAutomationReply, recordAutomationEvent, getAutomationStats, resetAutomationStats} from './automation.js';
 
 const logger = pino({level:'info'});
 export const ConnectionState = {
@@ -146,11 +146,33 @@ function listenMessages(socket) {
         await socket.sendMessage(jid, {text:'Memori percakapan AI untuk chat ini sudah direset.'});
         continue;
       }
+      recordAutomationEvent('received');
       const config = autoReplyConfig;
       const matchesStatic = config.enabled && config.reply && (!config.trigger || text.toLowerCase().includes(config.trigger.toLowerCase()));
       const ai = aiConfig;
+      const advancedRule = automationConfig.rulesEnabled
+        ? findAutomationRule(text, automationConfig.rules)
+        : null;
+      const automationRequested = automationConfig.paused || Boolean(advancedRule) || matchesStatic || ai.enabled;
+      if (!automationRequested) continue;
+      const gate = checkAutomationAllowed(automationConfig, jid);
+      if (!gate.allowed) {
+        recordAutomationEvent('filtered');
+        logger.info({from:jid, reason:gate.reason}, 'Automation safety rule filtered message');
+        continue;
+      }
       try {
-        if (ai.enabled) {
+        if (advancedRule) {
+          await socket.sendMessage(jid, {text:advancedRule.reply});
+          recordAutomationReply(jid);
+          recordAutomationEvent('rulesReplied');
+          logger.info({to:jid, ruleId:advancedRule.id, keyword:advancedRule.matchedKeyword}, 'Advanced automation rule replied');
+        } else if (matchesStatic) {
+          await socket.sendMessage(jid, {text:config.reply});
+          recordAutomationReply(jid);
+          recordAutomationEvent('staticReplied');
+          logger.info({to:jid}, 'Auto-reply sent');
+        } else if (ai.enabled && !automationConfig.paused) {
           const history = aiHistories.get(jid) || [];
           await socket.sendPresenceUpdate('composing', jid).catch(() => {});
           const answer = await generateAIReply(ai, text, {history});
@@ -158,12 +180,13 @@ function listenMessages(socket) {
           history.push({role:'user', content:text.slice(0,3000)}, {role:'assistant', content:answer.slice(0,3000)});
           aiHistories.set(jid, history.slice(-MAX_HISTORY_MESSAGES));
           await socket.sendPresenceUpdate('paused', jid).catch(() => {});
+          recordAutomationReply(jid);
+          recordAutomationEvent('aiReplied');
           logger.info({to:jid, provider:ai.provider, model:ai.model}, 'AI auto-reply sent');
-        } else if (matchesStatic) {
-          await socket.sendMessage(jid, {text:config.reply});
-          logger.info({to:jid}, 'Auto-reply sent');
         }
       } catch (error) {
+        recordAutomationEvent('failures');
+        await socket.sendPresenceUpdate('paused', jid).catch(() => {});
         logger.error({err:error, provider:ai.provider}, 'Auto-reply failed');
       }
     }

@@ -25,7 +25,7 @@ The pinned Node.js mobile binary currently comes from a prerelease mobile build 
 - Native Android status and control UI.
 - WhatsApp phone-number pairing-code flow.
 - Outgoing text messages.
-- Keyword-based auto-reply.
+- Keyword-based auto-reply.\n- Automation Pro: up to 30 match rules (`contains`, `exact`, `startsWith`), allowlist/blocklist, group filtering, chat cooldown, global rate limit, optional active hours, pause/resume and runtime metrics.
 - Baileys session persistence and reconnection logic.
 
 All live WhatsApp capabilities require internet connectivity and must be verified on a device before release.
@@ -52,6 +52,16 @@ Build and verification logs: https://github.com/sky-pixel-Sp/SKYWA/actions
 6. Link WhatsApp using the pairing-code flow in the app, then test with a separate chat before enabling automatic replies for normal use.
 
 **Device requirement:** this build targets ARM64 Android devices. CI verifies source tests, APK compilation, and package contents; it does not replace a real-device test of launch, WhatsApp pairing, message sending, and background behavior.
+
+### Automation Pro
+
+Automation Pro is configured from the native app screen. Each rule uses one line in this format:
+
+- `contains: harga, produk => Silakan sebut produk yang kamu cari.`
+- `exact: halo => Halo! Ada yang bisa dibantu?`
+- `startsWith: order => Kirim nomor pesanan agar bisa dicek.`
+
+A blank whitelist means chats are allowed unless blocked; a populated whitelist allows replies only to listed phone numbers/JIDs. Group chats are ignored by default. Cooldown and a global per-minute rate limit apply before automated replies. AI is used only when no custom/legacy rule matches; pause stops all automatic replies. Runtime metrics are local and reset when the process restarts. Test automation in a separate chat before enabling it for real customers.
 
 For a Linux build machine with JDK 17, Android SDK/NDK, CMake, Node.js 24+, npm, `curl`, and `unzip`:
 

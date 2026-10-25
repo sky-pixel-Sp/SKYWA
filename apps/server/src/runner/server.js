@@ -4,7 +4,7 @@ import path from 'node:path';
 import {createServer} from 'node:http';
 import {initDB, getSetting, saveSetting} from '../database.js';
 import * as controller from '../lib/runtimeController.js';
-import {logoutWhatsApp, sendText, getAutoReplyConfig, setAutoReplyConfig, getAIConfig, setAIConfig} from '../../../../packages/whatsapp-engine/src/engine.js';
+import {logoutWhatsApp, sendText, getAutoReplyConfig, setAutoReplyConfig, getAIConfig, setAIConfig, getAutomationConfig, setAutomationConfig, getAutomationStats, resetAutomationStats} from '../../../../packages/whatsapp-engine/src/engine.js';
 import {normalizeAIConfig, generateAIReply} from '../../../../packages/whatsapp-engine/src/ai-provider.js';
 
 const app = express();
@@ -50,6 +50,28 @@ app.post('/api/whatsapp/logout', async (_req, res) => {
 });
 
 app.get('/api/bot/config', (_req, res) => res.json(getAutoReplyConfig()));
+app.get('/api/automation/config', (_req, res) => res.json(getAutomationConfig()));
+app.post('/api/automation/config', (req, res) => {
+  try {
+    const config = setAutomationConfig(req.body || {});
+    saveSetting('automationConfig', config);
+    res.json({status:'saved', config});
+  } catch (error) {
+    res.status(400).json({status:'failed', error:error.message || 'Automation config invalid'});
+  }
+});
+app.get('/api/automation/stats', (_req, res) => res.json(getAutomationStats()));
+app.post('/api/automation/stats/reset', (_req, res) => res.json({status:'reset', stats:resetAutomationStats()}));
+app.post('/api/automation/pause', (_req, res) => {
+  const config = setAutomationConfig({...getAutomationConfig(), paused:true});
+  saveSetting('automationConfig', config);
+  res.json({status:'paused', config});
+});
+app.post('/api/automation/resume', (_req, res) => {
+  const config = setAutomationConfig({...getAutomationConfig(), paused:false});
+  saveSetting('automationConfig', config);
+  res.json({status:'resumed', config});
+});
 app.post('/api/bot/config', (req, res) => {
   const body = req.body || {};
   if (body.enabled !== undefined && typeof body.enabled !== 'boolean') return res.status(400).json({error:'enabled must be a boolean'});
@@ -123,6 +145,11 @@ const storedAIConfig = getSetting('aiConfig');
 if (storedAIConfig) {
   try { setAIConfig(storedAIConfig); }
   catch (error) { console.error('[SKYWA] Stored AI config was ignored:', error.message); }
+}
+const storedAutomationConfig = getSetting('automationConfig');
+if (storedAutomationConfig) {
+  try { setAutomationConfig(storedAutomationConfig); }
+  catch (error) { console.error('[SKYWA] Stored automation config was ignored:', error.message); }
 }
 const storedBotConfig = getSetting('botConfig');
 if (storedBotConfig) {

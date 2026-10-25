@@ -59,6 +59,18 @@ public class MainActivity extends Activity {
     private CheckBox autoReplyEnabled;
     private EditText triggerInput;
     private EditText replyInput;
+    private boolean automationConfigLoaded = false;
+    private CheckBox automationRulesEnabled;
+    private CheckBox automationIgnoreGroups;
+    private CheckBox automationHoursEnabled;
+    private EditText automationRulesInput;
+    private EditText automationAllowlistInput;
+    private EditText automationBlocklistInput;
+    private EditText automationCooldownInput;
+    private EditText automationMaxRepliesInput;
+    private EditText automationStartInput;
+    private EditText automationEndInput;
+    private TextView automationStats;
 
     private final Runnable periodicRefresh = new Runnable() {
         @Override public void run() {
@@ -129,6 +141,26 @@ public class MainActivity extends Activity {
         triggerInput = addInput(botCard, "Kata kunci (boleh kosong untuk semua pesan)", false);
         replyInput = addInput(botCard, "Balasan otomatis", true);
         addButton(botCard, "SIMPAN ATURAN AUTO-REPLY", ACCENT, this::saveAutoReply);
+
+        LinearLayout automationCard = addCard("4. AUTOMATION PRO • MULTI-RULE");
+        addText(automationCard, "Buat banyak aturan balasan, batasi frekuensi, atur jam aktif, abaikan grup, dan whitelist/blacklist nomor. Format aturan per baris: contains: harga, produk => Balasan untuk harga/produk. Mode tersedia: contains, exact, startsWith.", 13, MUTED, false);
+        automationRulesEnabled = addCheckBox(automationCard, "Aktifkan multi-rule automation");
+        automationIgnoreGroups = addCheckBox(automationCard, "Abaikan pesan dari grup (disarankan)");
+        automationHoursEnabled = addCheckBox(automationCard, "Batasi otomatisasi ke jam aktif");
+        automationCooldownInput = addInput(automationCard, "Cooldown per chat dalam detik (default 10)", false);
+        automationCooldownInput.setInputType(2);
+        automationMaxRepliesInput = addInput(automationCard, "Maksimum balasan bot per menit (1–60)", false);
+        automationMaxRepliesInput.setInputType(2);
+        automationStartInput = addInput(automationCard, "Jam mulai format 24 jam, contoh 08:00", false);
+        automationEndInput = addInput(automationCard, "Jam selesai format 24 jam, contoh 21:00", false);
+        automationAllowlistInput = addInput(automationCard, "Whitelist nomor/JID (opsional, pisahkan koma/baris baru)", true);
+        automationBlocklistInput = addInput(automationCard, "Blacklist nomor/JID (opsional, pisahkan koma/baris baru)", true);
+        automationRulesInput = addInput(automationCard, "Aturan per baris: contains: halo => Halo!\\nexact: harga => Silakan sebut produk.\\nstartsWith: order => Kirim nomor pesanan.", true);
+        addButton(automationCard, "SIMPAN AUTOMATION PRO", ACCENT, this::saveAutomation);
+        automationStats = addText(automationCard, "Statistik otomatisasi: memuat…", 12, MUTED, false);
+        addButton(automationCard, "JEDA SEMUA BALASAN OTOMATIS", 0xFF34425C, this::pauseAutomation);
+        addButton(automationCard, "LANJUTKAN BALASAN OTOMATIS", GREEN, this::resumeAutomation);
+        addButton(automationCard, "RESET STATISTIK AUTOMATION", 0xFF34425C, this::resetAutomationStats);
 
         LinearLayout infoCard = addCard("RUNTIME ANDROID TERTANAM");
         addText(infoCard, "Server Node.js, mesin WhatsApp, dan dependensinya disertakan dalam APK. SKYWA menyiapkan runtime di penyimpanan privat aplikasi dan mengelolanya lewat layanan latar depan Android. Tidak perlu browser, Termux, atau menjalankan perintah secara manual.", 13, MUTED, false);
@@ -212,6 +244,17 @@ public class MainActivity extends Activity {
         params.bottomMargin = dp(10);
         parent.addView(field, params);
         return field;
+    }
+
+    private CheckBox addCheckBox(LinearLayout parent, String label) {
+        CheckBox checkBox = new CheckBox(this);
+        checkBox.setText(label);
+        checkBox.setTextColor(WHITE);
+        checkBox.setButtonTintList(android.content.res.ColorStateList.valueOf(ACCENT));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.bottomMargin = dp(8);
+        parent.addView(checkBox, params);
+        return checkBox;
     }
 
     private void addButton(LinearLayout parent, String label, int color, Runnable action) {
@@ -313,6 +356,127 @@ public class MainActivity extends Activity {
         performAction("POST", "/api/bot/config", body, "Menyimpan aturan auto-reply");
     }
 
+    private org.json.JSONArray parseList(String raw) {
+        org.json.JSONArray result = new org.json.JSONArray();
+        java.util.LinkedHashSet<String> values = new java.util.LinkedHashSet<>();
+        if (raw != null) {
+            for (String part : raw.split("[,;\\n\\r]+")) {
+                String value = part.trim();
+                if (!value.isEmpty()) values.add(value);
+            }
+        }
+        for (String value : values) result.put(value);
+        return result;
+    }
+
+    private org.json.JSONArray parseAutomationRules(String raw) throws JSONException {
+        org.json.JSONArray rules = new org.json.JSONArray();
+        if (raw == null || raw.trim().isEmpty()) return rules;
+        int index = 0;
+        for (String line : raw.split("\\r?\\n")) {
+            String value = line.trim();
+            if (value.isEmpty() || value.startsWith("#")) continue;
+            int separator = value.indexOf("=>");
+            if (separator <= 0 || separator + 2 >= value.length()) {
+                throw new IllegalArgumentException("Format aturan salah. Gunakan: contains: kata kunci => balasan");
+            }
+            String matcher = value.substring(0, separator).trim();
+            String reply = value.substring(separator + 2).trim();
+            String matchType = "contains";
+            int colon = matcher.indexOf(':');
+            if (colon > 0) {
+                String mode = matcher.substring(0, colon).trim();
+                if ("contains".equalsIgnoreCase(mode) || "exact".equalsIgnoreCase(mode) || "startsWith".equalsIgnoreCase(mode)) {
+                    matchType = "startsWith".equalsIgnoreCase(mode) ? "startsWith" : mode.toLowerCase(java.util.Locale.ROOT);
+                    matcher = matcher.substring(colon + 1).trim();
+                }
+            }
+            org.json.JSONArray keywords = parseList(matcher);
+            if (keywords.length() == 0 || reply.isEmpty()) {
+                throw new IllegalArgumentException("Setiap aturan perlu kata kunci dan balasan.");
+            }
+            JSONObject rule = new JSONObject();
+            rule.put("id", "rule-" + (++index));
+            rule.put("enabled", true);
+            rule.put("matchType", matchType);
+            rule.put("keywords", keywords);
+            rule.put("reply", reply);
+            rules.put(rule);
+            if (index >= 30) break;
+        }
+        return rules;
+    }
+
+    private String rulesToText(org.json.JSONArray rules) {
+        if (rules == null) return "";
+        StringBuilder output = new StringBuilder();
+        for (int i = 0; i < rules.length(); i++) {
+            JSONObject rule = rules.optJSONObject(i);
+            if (rule == null) continue;
+            if (i > 0) output.append('\\n');
+            String mode = rule.optString("matchType", "contains");
+            output.append(mode).append(": ");
+            org.json.JSONArray keywords = rule.optJSONArray("keywords");
+            if (keywords != null) {
+                for (int k = 0; k < keywords.length(); k++) {
+                    if (k > 0) output.append(", ");
+                    output.append(keywords.optString(k, ""));
+                }
+            }
+            output.append(" => ").append(rule.optString("reply", ""));
+        }
+        return output.toString();
+    }
+
+    private String jsonArrayToLines(org.json.JSONArray values) {
+        if (values == null) return "";
+        StringBuilder output = new StringBuilder();
+        for (int i = 0; i < values.length(); i++) {
+            if (i > 0) output.append('\\n');
+            output.append(values.optString(i, ""));
+        }
+        return output.toString();
+    }
+
+    private void saveAutomation() {
+        try {
+            int cooldown = Integer.parseInt(automationCooldownInput.getText().toString().trim());
+            int maxReplies = Integer.parseInt(automationMaxRepliesInput.getText().toString().trim());
+            if (cooldown < 0 || cooldown > 3600) throw new IllegalArgumentException("Cooldown harus 0–3600 detik.");
+            if (maxReplies < 1 || maxReplies > 60) throw new IllegalArgumentException("Batas balasan harus 1–60 per menit.");
+            JSONObject body = new JSONObject();
+            body.put("rulesEnabled", automationRulesEnabled.isChecked());
+            body.put("ignoreGroups", automationIgnoreGroups.isChecked());
+            body.put("activeHoursEnabled", automationHoursEnabled.isChecked());
+            body.put("cooldownSeconds", cooldown);
+            body.put("maxRepliesPerMinute", maxReplies);
+            body.put("activeStart", automationStartInput.getText().toString().trim());
+            body.put("activeEnd", automationEndInput.getText().toString().trim());
+            body.put("allowlist", parseList(automationAllowlistInput.getText().toString()));
+            body.put("blocklist", parseList(automationBlocklistInput.getText().toString()));
+            body.put("rules", parseAutomationRules(automationRulesInput.getText().toString()));
+            performAction("POST", "/api/automation/config", body, "Menyimpan Automation Pro");
+        } catch (NumberFormatException error) {
+            actionStatus.setText("Isi cooldown dan batas balasan dengan angka.");
+            actionStatus.setTextColor(RED);
+        } catch (Exception error) {
+            actionStatus.setText("Aturan belum valid: " + safeMessage(error));
+            actionStatus.setTextColor(RED);
+        }
+    }
+
+    private void pauseAutomation() {
+        performAction("POST", "/api/automation/pause", new JSONObject(), "Menjeda otomatisasi");
+    }
+
+    private void resumeAutomation() {
+        performAction("POST", "/api/automation/resume", new JSONObject(), "Melanjutkan otomatisasi");
+    }
+
+    private void resetAutomationStats() {
+        performAction("POST", "/api/automation/stats/reset", new JSONObject(), "Mereset statistik otomatisasi");
+    }
+
     private void performAction(String method, String path, JSONObject body, String label) {
         actionStatus.setText(label + "…");
         actionStatus.setTextColor(MUTED);
@@ -325,6 +489,7 @@ public class MainActivity extends Activity {
                     actionStatus.setText(label + ": " + resultStatus + (detail.isEmpty() ? "" : " — " + detail));
                     actionStatus.setTextColor("failed".equalsIgnoreCase(resultStatus) ? RED : GREEN);
                     if ("/api/bot/config".equals(path)) botConfigLoaded = true;
+                    if ("/api/automation/config".equals(path) || "/api/automation/pause".equals(path) || "/api/automation/resume".equals(path)) automationConfigLoaded = true;
                     refreshStatus();
                 });
             } catch (Exception error) {
@@ -345,6 +510,8 @@ public class MainActivity extends Activity {
             JSONObject system = null;
             JSONObject whatsapp = null;
             JSONObject config = null;
+            JSONObject advancedConfig = null;
+            JSONObject advancedStats = null;
             String systemError = null;
             String whatsappError = null;
             try {
@@ -365,10 +532,24 @@ public class MainActivity extends Activity {
                         config = null;
                     }
                 }
+                if (!automationConfigLoaded) {
+                    try {
+                        advancedConfig = apiRequest("GET", "/api/automation/config", null);
+                    } catch (Exception ignored) {
+                        advancedConfig = null;
+                    }
+                }
+                try {
+                    advancedStats = apiRequest("GET", "/api/automation/stats", null);
+                } catch (Exception ignored) {
+                    advancedStats = null;
+                }
             }
             final JSONObject finalSystem = system;
             final JSONObject finalWhatsapp = whatsapp;
             final JSONObject finalConfig = config;
+            final JSONObject finalAdvancedConfig = advancedConfig;
+            final JSONObject finalAdvancedStats = advancedStats;
             final String finalSystemError = systemError;
             final String finalWhatsappError = whatsappError;
             runOnUiThread(() -> {
@@ -415,6 +596,29 @@ public class MainActivity extends Activity {
                             triggerInput.setText(finalConfig.optString("trigger", ""));
                             replyInput.setText(finalConfig.optString("reply", ""));
                             botConfigLoaded = true;
+                        }
+                        if (finalAdvancedConfig != null && !automationConfigLoaded) {
+                            automationRulesEnabled.setChecked(finalAdvancedConfig.optBoolean("rulesEnabled", false));
+                            automationIgnoreGroups.setChecked(finalAdvancedConfig.optBoolean("ignoreGroups", true));
+                            automationHoursEnabled.setChecked(finalAdvancedConfig.optBoolean("activeHoursEnabled", false));
+                            automationCooldownInput.setText(String.valueOf(finalAdvancedConfig.optInt("cooldownSeconds", 10)));
+                            automationMaxRepliesInput.setText(String.valueOf(finalAdvancedConfig.optInt("maxRepliesPerMinute", 8)));
+                            automationStartInput.setText(finalAdvancedConfig.optString("activeStart", "08:00"));
+                            automationEndInput.setText(finalAdvancedConfig.optString("activeEnd", "21:00"));
+                            automationAllowlistInput.setText(jsonArrayToLines(finalAdvancedConfig.optJSONArray("allowlist")));
+                            automationBlocklistInput.setText(jsonArrayToLines(finalAdvancedConfig.optJSONArray("blocklist")));
+                            automationRulesInput.setText(rulesToText(finalAdvancedConfig.optJSONArray("rules")));
+                            automationConfigLoaded = true;
+                        }
+                        if (finalAdvancedStats != null) {
+                            automationStats.setText("Pesan teks masuk: " + finalAdvancedStats.optInt("received", 0)
+                                + " • Terfilter: " + finalAdvancedStats.optInt("filtered", 0)
+                                + "\\nBalasan rule: " + finalAdvancedStats.optInt("rulesReplied", 0)
+                                + " • Balasan statis: " + finalAdvancedStats.optInt("staticReplied", 0)
+                                + "\\nBalasan AI: " + finalAdvancedStats.optInt("aiReplied", 0)
+                                + " • Gagal: " + finalAdvancedStats.optInt("failures", 0)
+                                + "\\nBalasan dalam 60 detik: " + finalAdvancedStats.optInt("repliesLastMinute", 0)
+                                + (finalAdvancedConfig != null && finalAdvancedConfig.optBoolean("paused", false) ? "\\nSTATUS: DIJEDA" : ""));
                         }
                     }
                 } finally {
