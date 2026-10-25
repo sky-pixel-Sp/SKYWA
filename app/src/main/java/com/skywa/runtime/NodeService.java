@@ -106,9 +106,12 @@ public final class NodeService extends Service {
         // Preserve WhatsApp credentials and user configuration across APK updates.
         File existingData = new File(runtimeRoot, "data");
         File stagedData = new File(stagingRoot, "data");
-        if (existingData.isDirectory() && !stagedData.exists()
-                && !existingData.renameTo(stagedData)) {
-            copyDirectory(existingData, stagedData);
+        if (existingData.isDirectory()) {
+            // Runtime user data always wins over any bundled seed directory.
+            deleteRecursively(stagedData);
+            if (!existingData.renameTo(stagedData)) {
+                copyDirectory(existingData, stagedData);
+            }
         }
 
         try (FileOutputStream output = new FileOutputStream(new File(stagingRoot, ".skywa-assets-version"))) {
