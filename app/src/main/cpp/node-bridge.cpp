@@ -84,7 +84,7 @@ Java_com_skywa_runtime_NodeRuntime_startNodeWithArguments(
 
     // libuv may rewrite argv during Node bootstrap; Node's mobile samples
     // therefore allocate the actual argument strings in one contiguous block.
-    std::vector<char> argumentBuffer(argumentBytes, '\\0');
+    std::vector<char> argumentBuffer(argumentBytes, '\0');
     std::vector<char *> argv;
     argv.reserve(static_cast<size_t>(argumentCount) + 1);
     size_t offset = 0;
