@@ -1,4 +1,5 @@
 import express from 'express';
+import {timingSafeEqual} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {createServer} from 'node:http';
@@ -10,6 +11,19 @@ import {normalizeAIConfig, generateAIReply} from '../../../../packages/whatsapp-
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const BIND = process.env.SKYWA_BIND || '127.0.0.1';
+const API_TOKEN = typeof process.env.SKYWA_API_TOKEN === 'string' ? process.env.SKYWA_API_TOKEN : '';
+app.use('/api', (req, res, next) => {
+  if (req.path === '/health') return next();
+  if (!API_TOKEN) {
+    return res.status(503).json({status:'unavailable', error:'Token keamanan API lokal belum dikonfigurasi. Restart runtime SKYWA dari aplikasi.'});
+  }
+  const suppliedBytes = Buffer.from(req.get('X-Skywa-Token') || '', 'utf8');
+  const expectedBytes = Buffer.from(API_TOKEN, 'utf8');
+  if (suppliedBytes.length !== expectedBytes.length || !timingSafeEqual(suppliedBytes, expectedBytes)) {
+    return res.status(401).json({status:'unauthorized', error:'Token API lokal tidak valid. Restart runtime dan buka ulang aplikasi SKYWA.'});
+  }
+  return next();
+});
 app.use(express.json({limit:'1mb'}));
 
 app.get('/api/health', (_req, res) => {
@@ -148,13 +162,22 @@ app.post('/api/message/send', async (req, res) => {
     const result = await sendText(jid.trim(), text);
     res.json({status:'sent', jid:jid.trim(), messageId:result?.key?.id || null});
   } catch (error) {
-    res.status(500).json({error:error.message || 'Message send failed'});
+    if (/Not connected to WhatsApp/i.test(error?.message || '')) {
+      return res.status(409).json({error:'WhatsApp belum terhubung. Hubungkan perangkat WhatsApp terlebih dahulu, lalu kirim ulang.'});
+    }
+    return res.status(500).json({error:'Pesan gagal dikirim. Periksa koneksi WhatsApp dan coba lagi.'});
   }
 });
 
 app.use((error, req, res, _next) => {
-  console.error('[SKYWA ERROR]', error.message);
-  res.status(500).json({error:error.message || 'Internal server error', endpoint:req.path || 'unknown'});
+  if (error?.type === 'entity.parse.failed') {
+    return res.status(400).json({status:'failed', error:'JSON body tidak valid. Periksa format JSON lalu coba lagi.'});
+  }
+  if (error?.type === 'entity.too.large') {
+    return res.status(413).json({status:'failed', error:'Ukuran request terlalu besar.'});
+  }
+  console.error('[SKYWA ERROR]', error?.name || 'Error');
+  return res.status(500).json({error:'Terjadi kesalahan internal. Periksa pengaturan lalu coba lagi.', endpoint:req.path || 'unknown'});
 });
 
 initDB();

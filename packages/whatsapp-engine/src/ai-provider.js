@@ -23,7 +23,7 @@ export function buildAIRequest(config,userText,history=[]) {
   const normalized=normalizeAIConfig({...config,enabled:false,apiKey:config.apiKey||'local'});
   const baseUrl=normalized.provider==='openrouter'?'https://openrouter.ai/api/v1':normalized.baseUrl;
   return {url:baseUrl.endsWith('/chat/completions')?baseUrl:baseUrl+'/chat/completions',
-    headers:{'Content-Type':'application/json',...(normalized.provider==='openrouter'?{Authorization:'Bearer '+config.apiKey,'HTTP-Referer':'https://github.com/sky-pixel-Sp/SKYWA','X-Title':'SKYWA WhatsApp Bot Studio'}:config.apiKey?{Authorization:'Bearer '+config.apiKey}:{})},
+    headers:{'Content-Type':'application/json',...(normalized.provider==='openrouter'?{Authorization:'Bearer '+config.apiKey,'HTTP-Referer':'https://github.com/sky-pixel-Sp/SKYWA','X-Title':'SKYWA WhatsApp Bot Studio'}:{})},
     body:{model:normalized.model,messages:[{role:'system',content:normalized.systemPrompt},...(Array.isArray(history)?history.slice(-12).filter(m=>m&&['user','assistant'].includes(m.role)&&typeof m.content==='string').map(m=>({role:m.role,content:m.content.slice(0,3000)})):[]),{role:'user',content:String(userText).slice(0,6000)}],max_tokens:normalized.maxTokens,temperature:normalized.temperature}};
 }
 export async function generateAIReply(config,userText,options={}) {

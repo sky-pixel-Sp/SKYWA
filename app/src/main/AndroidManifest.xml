@@ -10,7 +10,8 @@
       android:theme="@style/Theme.Skywa"
       android:allowBackup="false"
       android:icon="@drawable/skywa_logo"
-      android:usesCleartextTraffic="true">
+      android:usesCleartextTraffic="false"
+      android:networkSecurityConfig="@xml/network_security_config">
     <activity
         android:name="com.skywa.ui.AISettingsActivity"
         android:exported="false" />
