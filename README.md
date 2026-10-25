@@ -1,63 +1,58 @@
 # SKYWA WhatsApp Bot Studio
 
-SKYWA is a small Android control panel plus a Node.js / Baileys companion backend. The Android app controls the backend over the device's loopback interface. The backend must run in Termux on the same Android phone.
+SKYWA is a native Android application for controlling the SKYWA WhatsApp automation engine.
 
-## Included in this build
+## Product requirement
 
-- Android app with backend health/status, WhatsApp pairing-code flow, stop control, sending text messages, and a basic keyword auto-reply rule.
-- Node.js companion server that defaults to 127.0.0.1:3000.
-- WhatsApp session persistence and basic reconnection behavior.
-- Unit tests for engine exports, disconnected-send validation, and auto-reply configuration.
-- GitHub Actions workflow for syntax checks, tests, Android APK build and APK package verification.
+The product target is **one installable Android APK**. End users should not need a website, browser, Termux, shell commands, or a separately running backend. The Android build now has a JNI/C++ bridge and a foreground service intended to start the embedded Node.js runtime, backend, Baileys engine, and production dependencies from within the installed app. The current debug APK targets 64-bit ARM Android devices to avoid packaging two additional CPU runtimes.
 
-## Download
+## Standalone runtime status
 
-Open the repository Actions page and download the SKYWA debug APK artifact from a successful run:
-https://github.com/sky-pixel-Sp/SKYWA/actions
+The standalone integration source has been added on the `feat/standalone-android-runtime` branch:
 
-The artifact is temporary (workflow retention is 14 days). Check that the workflow run says successful before installing the APK.
+- Node.js 24 mobile runtime preparation and SHA-256 verification.
+- Native C++/JNI bridge for launching Node.js in-process.
+- Android foreground service with private app storage and a persistent notification.
+- Bundling of the existing SKYWA server, WhatsApp engine, and production npm dependencies into Android assets.
+- APK checks for the native runtime and JavaScript backend entrypoints.
 
-## First-time setup on Android
+**This is implementation work, not yet proof of a fully working release.** The GitHub Actions build must pass, and pairing, delivery, auto-reply, app-update preservation, and background reliability still need a real Android device and a real WhatsApp test account. A successful compile alone does not prove WhatsApp works.
 
-1. Download the source ZIP from the repository's Code menu, or clone the repository inside Termux so files are stored in Termux's private home rather than shared storage.
-2. In Termux, install dependencies and run the setup script. From the project folder, execute:
+The pinned Node.js mobile binary currently comes from a prerelease mobile build based on Node.js 24.22.1. The preparation script checks the exact SHA-256 digest before using it. See [Standalone Android Runtime](docs/STANDALONE_ANDROID_RUNTIME.md).
 
-    pkg update -y
-    pkg install -y git nodejs-lts
-    bash scripts/setup-termux.sh
-    bash scripts/start-termux.sh
+## Existing app features
 
-3. Keep the Termux backend running. Open SKYWA Bot Studio and tap Refresh Status.
-4. Enter the WhatsApp phone number in international format, without a plus sign (for Indonesia, for example 6281234567890), then tap Minta Kode Pairing.
-5. On WhatsApp, open Perangkat tertaut, choose Tautkan perangkat, select Tautkan dengan nomor telepon, and enter the code shown by SKYWA.
-6. After connection, send a test message to a number you control. Auto-reply is disabled by default; configure its keyword and reply text in the app, then enable and save it.
+- Native Android status and control UI.
+- WhatsApp phone-number pairing-code flow.
+- Outgoing text messages.
+- Keyword-based auto-reply.
+- Baileys session persistence and reconnection logic.
 
-## Running from a Termux clone
+All live WhatsApp capabilities require internet connectivity and must be verified on a device before release.
 
-Clone the project within Termux home to avoid shared-storage permission limitations:
+## Build and download
 
-    pkg install -y git nodejs-lts
-    git clone https://github.com/sky-pixel-Sp/SKYWA.git
-    cd SKYWA
-    bash scripts/setup-termux.sh
-    bash scripts/start-termux.sh
+The GitHub Actions workflow prepares the embedded runtime and then builds/verifies the debug APK:
 
-If the repository's default branch has not yet been updated to this build, download the source ZIP for branch ci/skywa-import-and-ci instead.
+**Download standalone APK (ARM64):** https://github.com/sky-pixel-Sp/SKYWA/releases/download/skywa-build-33/SKYWA-debug.apk
 
-## Troubleshooting
+This is a GitHub prerelease build. The APK is distributed as a release asset rather than committed to the source branch.
 
-- Backend OFFLINE: run the Termux start script and keep it open. The app expects http://127.0.0.1:3000.
-- Pairing code not appearing: verify the phone number with country code, internet connectivity, and the current WhatsApp device-linking flow. Stop and restart once, then refresh status.
-- WhatsApp will disconnect if Android kills Termux in the background. Set Termux battery use to Unrestricted and consider running termux-wake-lock in Termux.
-- Do not put project files in shared storage and do not commit WhatsApp credentials, session files, API tokens, or .env files.
+Build and verification logs: https://github.com/sky-pixel-Sp/SKYWA/actions
 
-## Safety and limits
+For a Linux build machine with JDK 17, Android SDK/NDK, CMake, Node.js 24+, npm, `curl`, and `unzip`:
 
-- The server binds to loopback by default; do not expose it publicly. The Android app uses cleartext HTTP only to reach 127.0.0.1 on the same device.
-- This is an installable preview, not a fully tested production release. A live WhatsApp pairing, end-to-end delivery, and long-duration background stability still need to be checked on a real phone.
-- Use auto-reply responsibly. An empty keyword means every incoming text message can receive the configured reply.
-- The Android app requires Android 7.0 (API 24) or newer. The companion backend requires Node.js 20 or newer.
+```bash
+bash scripts/prepare-standalone-android.sh
+gradle --no-daemon assembleDebug
+bash scripts/verify-apk.sh
+```
 
-## Repository status
+The preparation script is necessary because the large native runtime and `node_modules` are generated/downloaded build inputs and are not committed into source control.
 
-The initial GitHub repository was empty. This build reconstructs the main control/backend pieces from the available SKYWA-CI-Ready archive through the GitHub connector; it is not a byte-for-byte import of every file in that archive.
+## Security and reliability
+
+- WhatsApp session credentials and settings are stored in Android app-private, no-backup storage; they must never be bundled inside the APK.
+- The local API remains bound to `127.0.0.1` and is not intentionally exposed publicly.
+- A foreground service and partial wake lock are used to improve continuity while the bot is running. This can increase battery use; Android OEM battery-management and force-stop behavior can still stop background activity.
+- Do not claim standalone operation or successful live WhatsApp tests until the APK and physical-device tests have actually passed.

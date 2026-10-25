@@ -1,13 +1,13 @@
 name: SKYWA CI — tests and Android debug APK
 on:
   push:
-    branches: [main, master, "ci/**"]
+    branches: [main, master, "ci/**", "feat/standalone-android-runtime"]
   pull_request:
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: skywa-ci-${{ github.ref }}
+  group: skywa-ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   verify-and-build:
@@ -22,7 +22,7 @@ jobs:
           java-version: '17'
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Install engine dependencies
         working-directory: packages/whatsapp-engine
         run: npm install --no-audit --no-fund
@@ -40,7 +40,9 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses
       - name: Install Android SDK components
-        run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+        run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "cmake;3.22.1" "ndk;27.3.13750724"
+      - name: Prepare embedded Node.js runtime and production bot bundle
+        run: bash scripts/prepare-standalone-android.sh
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
@@ -72,32 +74,32 @@ jobs:
             echo "- APK verification: ${VERIFY_OUTCOME:-not reached}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  publish-release:
-    name: Publish APK download on main
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  publish-repository-download:
+    name: Publish APK in repository download branch
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feat/standalone-android-runtime'
     needs: verify-and-build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
       - name: Download verified APK
         uses: actions/download-artifact@v4
         with:
           name: SKYWA-debug-apk-${{ github.sha }}
           path: release
       - name: Prepare stable filename
-        run: cp release/app-debug.apk release/SKYWA-debug.apk
-      - name: Publish preview release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: skywa-build-${{ github.run_number }}
-          target_commitish: ${{ github.sha }}
-          name: SKYWA Android APK build ${{ github.run_number }}
-          body: |
-            Automatically built APK from a successful syntax, unit-test, Android build and package-metadata verification run.
-            
-            This is a debug preview. Pairing and message delivery must still be tested on a real Android device with the Termux backend.
-          prerelease: true
-          make_latest: false
-          fail_on_unmatched_files: true
-          files: release/SKYWA-debug.apk
+        run: cp release/app-debug.apk SKYWA-standalone-arm64.apk
+      - name: Publish APK on a dedicated download branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan apk-downloads
+          git add SKYWA-standalone-arm64.apk
+          git commit -m "Publish SKYWA standalone ARM64 APK"
+          git push --force origin HEAD:refs/heads/apk-downloads

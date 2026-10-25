@@ -1,7 +1,9 @@
 package com.skywa.ui;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.os.Bundle;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.graphics.Color;
@@ -15,6 +17,8 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+
+import com.skywa.runtime.NodeService;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -77,15 +81,15 @@ public class MainActivity extends Activity {
         scroll.addView(page);
         setContentView(scroll);
 
-        TextView eyebrow = addText(page, "WHATSAPP AUTOMATION • ANDROID + TERMUX", 11, ACCENT, true);
+        TextView eyebrow = addText(page, "WHATSAPP AUTOMATION • ANDROID NATIVE", 11, ACCENT, true);
         eyebrow.setLetterSpacing(0.08f);
         addText(page, "SKYWA", 34, WHITE, true);
         addText(page, "Bot Studio", 18, MUTED, false);
-        addText(page, "Panel kontrol untuk backend SKYWA yang berjalan lokal di perangkat ini.", 14, MUTED, false);
+        addText(page, "Server Node.js dan mesin WhatsApp berjalan langsung di dalam aplikasi SKYWA.", 14, MUTED, false);
         addGap(page, 10);
 
         LinearLayout statusCard = addCard("STATUS SISTEM");
-        backendStatus = addText(statusCard, "Backend: memeriksa 127.0.0.1:3000…", 14, WHITE, true);
+        backendStatus = addText(statusCard, "Runtime lokal: memeriksa server…", 14, WHITE, true);
         controllerStatus = addText(statusCard, "Controller: —", 13, MUTED, false);
         whatsappStatus = addText(statusCard, "WhatsApp: belum diperiksa", 14, WHITE, true);
         pairingInfo = addText(statusCard, "Kode pairing akan muncul di sini setelah proses dimulai.", 13, MUTED, false);
@@ -118,13 +122,14 @@ public class MainActivity extends Activity {
         replyInput = addInput(botCard, "Balasan otomatis", true);
         addButton(botCard, "SIMPAN ATURAN AUTO-REPLY", ACCENT, this::saveAutoReply);
 
-        LinearLayout infoCard = addCard("CARA MENJALANKAN BACKEND");
-        addText(infoCard, "1. Buka Termux di ponsel yang sama.\n2. Jalankan bash scripts/start-termux.sh dari folder proyek SKYWA di direktori home Termux.\n3. Biarkan proses server tetap berjalan, lalu kembali ke aplikasi ini dan tekan Refresh Status.", 13, MUTED, false);
-        addText(infoCard, "Endpoint: 127.0.0.1:3000 • Backend tidak perlu dibuka ke jaringan publik.", 12, MUTED, false);
+        LinearLayout infoCard = addCard("RUNTIME ANDROID TERTANAM");
+        addText(infoCard, "Server Node.js, mesin WhatsApp, dan dependensinya disertakan dalam APK. SKYWA menyiapkan runtime di penyimpanan privat aplikasi dan mengelolanya lewat layanan latar depan Android. Tidak perlu browser, Termux, atau menjalankan perintah secara manual.", 13, MUTED, false);
+        addText(infoCard, "Endpoint internal: 127.0.0.1:3000 • hanya untuk komunikasi aplikasi lokal.", 12, MUTED, false);
 
-        actionStatus = addText(page, "Siap. Jalankan backend Termux terlebih dahulu.", 13, MUTED, false);
+        actionStatus = addText(page, "Menyiapkan runtime lokal SKYWA…", 13, MUTED, false);
         addGap(page, 12);
-        addText(page, "SKYWA preview • sambungan WhatsApp membutuhkan internet dan proses pairing resmi.", 11, MUTED, false);
+        addText(page, "Runtime tertanam • pairing dan pesan WhatsApp memerlukan internet.", 11, MUTED, false);
+        ensureRuntimeService();
         refreshStatus();
     }
 
@@ -137,6 +142,22 @@ public class MainActivity extends Activity {
     @Override protected void onPause() {
         handler.removeCallbacks(periodicRefresh);
         super.onPause();
+    }
+
+    private void ensureRuntimeService() {
+        try {
+            Intent intent = new Intent(this, NodeService.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent);
+            } else {
+                startService(intent);
+            }
+        } catch (RuntimeException error) {
+            if (actionStatus != null) {
+                actionStatus.setText("Tidak dapat memulai runtime Android: " + safeMessage(error));
+                actionStatus.setTextColor(RED);
+            }
+        }
     }
 
     private LinearLayout addCard(String title) {
@@ -302,7 +323,7 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> {
                     actionStatus.setText("Gagal: " + safeMessage(error));
                     actionStatus.setTextColor(RED);
-                    backendStatus.setText("Backend belum dapat dijangkau di 127.0.0.1:3000.");
+                    backendStatus.setText("Runtime lokal belum siap di 127.0.0.1:3000.");
                     backendStatus.setTextColor(RED);
                 });
             }
@@ -345,18 +366,18 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> {
                 try {
                     if (finalSystem == null) {
-                        backendStatus.setText("Backend OFFLINE • " + API_BASE);
+                        backendStatus.setText("Menunggu runtime lokal • " + API_BASE);
                         backendStatus.setTextColor(RED);
-                        controllerStatus.setText("Jalankan scripts/start-termux.sh dari Termux. " + (finalSystemError == null ? "" : finalSystemError));
+                        controllerStatus.setText("Menunggu server Node.js tertanam. " + (finalSystemError == null ? "" : finalSystemError));
                         whatsappStatus.setText("WhatsApp: belum dapat diperiksa");
                         whatsappStatus.setTextColor(MUTED);
-                        pairingInfo.setText("Pastikan server SKYWA berjalan di perangkat yang sama.");
+                        pairingInfo.setText("Runtime lokal sedang disiapkan. Biarkan aplikasi beberapa saat saat pertama dibuka.");
                     } else {
-                        backendStatus.setText("Backend ONLINE • " + finalSystem.optString("server", "SKYWA"));
+                        backendStatus.setText("Runtime lokal AKTIF • " + finalSystem.optString("server", "SKYWA"));
                         backendStatus.setTextColor(GREEN);
                         controllerStatus.setText("Controller: " + finalSystem.optString("controller", "unknown")
                                 + " • Database: " + finalSystem.optString("database", "unknown")
-                                + " • Runtime: " + finalSystem.optString("runtime", "Termux"));
+                                + " • Runtime: " + finalSystem.optString("runtime", "embedded-android"));
                         if (finalWhatsapp == null) {
                             whatsappStatus.setText("WhatsApp: " + (finalWhatsappError == null ? "tidak diketahui" : finalWhatsappError));
                             whatsappStatus.setTextColor(RED);
