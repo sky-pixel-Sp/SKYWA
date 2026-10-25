@@ -2,6 +2,7 @@ package com.skywa.ui;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Build;
 import android.os.Handler;
@@ -34,6 +35,8 @@ import java.nio.charset.StandardCharsets;
 
 public class MainActivity extends Activity {
     private static final String API_BASE = "http://127.0.0.1:3000";
+    private static final String PREFS_NAME = "skywa_control";
+    private static final String PREF_SERVER_ENABLED = "server_enabled";
     private static final int BG = Color.rgb(8, 14, 26);
     private static final int PANEL = Color.rgb(18, 28, 47);
     private static final int PANEL_DARK = Color.rgb(10, 18, 32);
@@ -48,6 +51,20 @@ public class MainActivity extends Activity {
     private volatile boolean refreshing = false;
     private boolean botConfigLoaded = false;
     private LinearLayout page;
+    private LinearLayout activeSection;
+    private LinearLayout homeSection;
+    private LinearLayout whatsappSection;
+    private LinearLayout automationSection;
+    private LinearLayout aiSection;
+    private LinearLayout bottomNavigation;
+    private final Button[] navigationButtons = new Button[4];
+    private Button serverToggleButton;
+    private TextView homeWhatsAppStatus;
+    private TextView buildInfoStatus;
+    private SharedPreferences preferences;
+    private boolean runtimeOnline = false;
+    private String serverTransition = "";
+    private String activeTab = "home";
     private TextView backendStatus;
     private TextView controllerStatus;
     private TextView whatsappStatus;
@@ -85,37 +102,66 @@ public class MainActivity extends Activity {
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
 
+        preferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+
+        LinearLayout appRoot = new LinearLayout(this);
+        appRoot.setOrientation(LinearLayout.VERTICAL);
+        appRoot.setBackgroundColor(BG);
+
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
+        scroll.setClipToPadding(false);
         page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
-        page.setPadding(dp(18), dp(18), dp(18), dp(28));
         page.setBackgroundColor(BG);
-        scroll.addView(page);
-        setContentView(scroll);
+        scroll.addView(page, new ScrollView.LayoutParams(-1, -2));
+        appRoot.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        homeSection = createSection();
+        whatsappSection = createSection();
+        automationSection = createSection();
+        aiSection = createSection();
+        page.addView(homeSection, new LinearLayout.LayoutParams(-1, -2));
+        page.addView(whatsappSection, new LinearLayout.LayoutParams(-1, -2));
+        page.addView(automationSection, new LinearLayout.LayoutParams(-1, -2));
+        page.addView(aiSection, new LinearLayout.LayoutParams(-1, -2));
+        activeSection = homeSection;
+
+        bottomNavigation = createBottomNavigation();
+        appRoot.addView(bottomNavigation, new LinearLayout.LayoutParams(-1, -2));
+        setContentView(appRoot);
 
         ImageView brandArt = new ImageView(this);
         brandArt.setImageResource(com.skywa.R.drawable.skywa_logo);
         brandArt.setContentDescription("SKYWA logo");
         LinearLayout.LayoutParams artParams = new LinearLayout.LayoutParams(dp(76), dp(76));
         artParams.bottomMargin = dp(12);
-        page.addView(brandArt, artParams);
-        TextView eyebrow = addText(page, "WHATSAPP AUTOMATION • ANDROID NATIVE", 11, ACCENT, true);
+        activeSection.addView(brandArt, artParams);
+        TextView eyebrow = addText(activeSection, "WHATSAPP AUTOMATION  •  ANDROID", 11, ACCENT, true);
         eyebrow.setLetterSpacing(0.08f);
-        addText(page, "SKYWA", 34, WHITE, true);
-        addText(page, "Bot Studio", 18, MUTED, false);
-        addText(page, "Server Node.js dan mesin WhatsApp berjalan langsung di dalam aplikasi SKYWA.", 14, MUTED, false);
-        addButton(page, "PENGATURAN AI • OPENROUTER / LOKAL", ACCENT, () -> startActivity(new Intent(this, AISettingsActivity.class)));
-        addGap(page, 10);
+        addText(activeSection, "Control Center", 29, WHITE, true);
+        addText(activeSection, "Kelola server, WhatsApp, dan AI dari satu aplikasi.", 14, MUTED, false);
+        addText(activeSection, "Tidak perlu Termux atau membuka website terpisah.", 13, MUTED, false);
+        addGap(activeSection, 10);
 
-        LinearLayout statusCard = addCard("STATUS SISTEM");
-        backendStatus = addText(statusCard, "Runtime lokal: memeriksa server…", 14, WHITE, true);
-        controllerStatus = addText(statusCard, "Controller: —", 13, MUTED, false);
-        whatsappStatus = addText(statusCard, "WhatsApp: belum diperiksa", 14, WHITE, true);
-        pairingInfo = addText(statusCard, "Kode pairing akan muncul di sini setelah proses dimulai.", 13, MUTED, false);
-        addButton(statusCard, "REFRESH STATUS", ACCENT, this::refreshStatus);
+        LinearLayout statusCard = addCard("SERVER LOKAL");
+        backendStatus = addText(statusCard, "Memeriksa server lokal…", 17, WHITE, true);
+        controllerStatus = addText(statusCard, "Server mengelola API dan fitur SKYWA.", 13, MUTED, false);
+        addText(statusCard, "Matikan server untuk menghentikan runtime lokal. Aplikasi dan tombol ON/OFF tetap tersedia.", 12, MUTED, false);
+        serverToggleButton = addButton(statusCard, "NYALAKAN SERVER", ACCENT, this::toggleEmbeddedServer);
+        addButton(statusCard, "PERIKSA STATUS", 0xFF293954, this::refreshStatus);
+        buildInfoStatus = addText(statusCard, "Versi runtime: memeriksa…", 11, MUTED, false);
+        homeWhatsAppStatus = addText(activeSection, "WhatsApp • memeriksa status…", 14, WHITE, true);
 
-        LinearLayout connectCard = addCard("1. SAMBUNGKAN WHATSAPP");
+        actionStatus = addText(activeSection, "Menyiapkan SKYWA…", 13, MUTED, false);
+        addText(activeSection, "Urutan mudah: 1) Nyalakan server  2) Hubungkan WhatsApp  3) Atur AI atau balasan.", 12, MUTED, false);
+
+        activeSection = whatsappSection;
+        addText(activeSection, "WHATSAPP", 27, WHITE, true);
+        addText(activeSection, "Hubungkan akun WhatsApp kamu dan uji pesan di sini.", 13, MUTED, false);
+        LinearLayout connectCard = addCard("STATUS & PAIRING");
+        whatsappStatus = addText(connectCard, "WhatsApp: belum diperiksa", 15, WHITE, true);
+        pairingInfo = addText(connectCard, "Kode pairing akan muncul setelah kamu meminta pairing.", 13, MUTED, false);
         addText(connectCard, "Masukkan nomor dalam format internasional tanpa tanda +. Contoh Indonesia: 6281234567890.", 13, MUTED, false);
         phoneInput = addInput(connectCard, "Nomor WhatsApp (contoh 62812…)", false);
         phoneInput.setInputType(3);
@@ -123,13 +169,16 @@ public class MainActivity extends Activity {
         addText(connectCard, "Di WhatsApp, buka Perangkat tertaut → Tautkan perangkat → Tautkan dengan nomor telepon, lalu masukkan kode yang tampil.", 12, MUTED, false);
         addButton(connectCard, "HENTIKAN KONEKSI (SESI TETAP DISIMPAN)", 0xFF34425C, this::stopWhatsApp);
 
-        LinearLayout sendCard = addCollapsibleCard("2. KIRIM PESAN", false);
+        LinearLayout sendCard = addCard("KIRIM PESAN");
         recipientInput = addInput(sendCard, "Nomor tujuan (contoh 62812…)", false);
         recipientInput.setInputType(3);
         messageInput = addInput(sendCard, "Tulis pesan yang akan dikirim", true);
         addButton(sendCard, "KIRIM PESAN", GREEN, this::sendMessage);
 
-        LinearLayout botCard = addCollapsibleCard("3. AUTO-REPLY SEDERHANA", false);
+        activeSection = automationSection;
+        addText(activeSection, "OTOMASI", 27, WHITE, true);
+        addText(activeSection, "Mulai dari satu balasan sederhana, lalu pakai Automation Pro jika perlu.", 13, MUTED, false);
+        LinearLayout botCard = addCard("AUTO-REPLY SEDERHANA");
         addText(botCard, "Aktifkan balasan otomatis untuk pesan masuk. Kata kunci kosong berarti semua pesan teks akan dibalas; gunakan dengan hati-hati.", 13, MUTED, false);
         autoReplyEnabled = new CheckBox(this);
         autoReplyEnabled.setText("Aktifkan auto-reply");
@@ -142,7 +191,7 @@ public class MainActivity extends Activity {
         replyInput = addInput(botCard, "Balasan otomatis", true);
         addButton(botCard, "SIMPAN ATURAN AUTO-REPLY", ACCENT, this::saveAutoReply);
 
-        LinearLayout automationCard = addCollapsibleCard("4. AUTOMATION PRO • MULTI-RULE", false);
+        LinearLayout automationCard = addCard("AUTOMATION PRO • MULTI-RULE");
         addText(automationCard, "Buat banyak aturan balasan, batasi frekuensi, atur jam aktif, abaikan grup, dan whitelist/blacklist nomor. Format aturan per baris: contains: harga, produk => Balasan untuk harga/produk. Mode tersedia: contains, exact, startsWith.", 13, MUTED, false);
         automationRulesEnabled = addCheckBox(automationCard, "Aktifkan multi-rule automation");
         automationIgnoreGroups = addCheckBox(automationCard, "Abaikan pesan dari grup (disarankan)");
@@ -155,20 +204,24 @@ public class MainActivity extends Activity {
         automationEndInput = addInput(automationCard, "Jam selesai format 24 jam, contoh 21:00", false);
         automationAllowlistInput = addInput(automationCard, "Whitelist nomor/JID (opsional, pisahkan koma/baris baru)", true);
         automationBlocklistInput = addInput(automationCard, "Blacklist nomor/JID (opsional, pisahkan koma/baris baru)", true);
-        automationRulesInput = addInput(automationCard, "Aturan per baris: contains: halo => Halo!\nexact: harga => Silakan sebut produk.\\nstartsWith: order => Kirim nomor pesanan.", true);
+        automationRulesInput = addInput(automationCard, "Aturan per baris: contains: halo => Halo!
+exact: harga => Silakan sebut produk.\\nstartsWith: order => Kirim nomor pesanan.", true);
         addButton(automationCard, "SIMPAN AUTOMATION PRO", ACCENT, this::saveAutomation);
         automationStats = addText(automationCard, "Statistik otomatisasi: memuat…", 12, MUTED, false);
         addButton(automationCard, "JEDA SEMUA BALASAN OTOMATIS", 0xFF34425C, this::pauseAutomation);
         addButton(automationCard, "LANJUTKAN BALASAN OTOMATIS", GREEN, this::resumeAutomation);
         addButton(automationCard, "RESET STATISTIK AUTOMATION", 0xFF34425C, this::resetAutomationStats);
 
-        LinearLayout infoCard = addCollapsibleCard("RUNTIME ANDROID TERTANAM", false);
+        activeSection = aiSection;
+        addText(activeSection, "AI STUDIO", 27, WHITE, true);
+        addText(activeSection, "Pilih penyedia AI, simpan kunci, lalu uji jawaban sebelum mengaktifkan balasan AI.", 13, MUTED, false);
+        addButton(activeSection, "BUKA PENGATURAN AI", ACCENT, () -> startActivity(new Intent(this, AISettingsActivity.class)));
+        LinearLayout infoCard = addCard("TENTANG RUNTIME");
         addText(infoCard, "Server Node.js, mesin WhatsApp, dan dependensinya disertakan dalam APK. SKYWA menyiapkan runtime di penyimpanan privat aplikasi dan mengelolanya lewat layanan latar depan Android. Tidak perlu browser, Termux, atau menjalankan perintah secara manual.", 13, MUTED, false);
         addText(infoCard, "Endpoint internal: 127.0.0.1:3000 • hanya untuk komunikasi aplikasi lokal.", 12, MUTED, false);
 
-        actionStatus = addText(page, "Menyiapkan runtime lokal SKYWA…", 13, MUTED, false);
-        addGap(page, 12);
-        addText(page, "Runtime tertanam • pairing dan pesan WhatsApp memerlukan internet.", 11, MUTED, false);
+        showTab("home");
+        updateServerButton();
         ensureRuntimeService();
         refreshStatus();
     }
@@ -184,20 +237,164 @@ public class MainActivity extends Activity {
         super.onPause();
     }
 
-    private void ensureRuntimeService() {
+    private LinearLayout createSection() {
+        LinearLayout section = new LinearLayout(this);
+        section.setOrientation(LinearLayout.VERTICAL);
+        section.setPadding(dp(18), dp(18), dp(18), dp(26));
+        section.setBackgroundColor(BG);
+        section.setVisibility(View.GONE);
+        return section;
+    }
+
+    private LinearLayout createBottomNavigation() {
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setPadding(dp(8), dp(6), dp(8), dp(8));
+        bar.setGravity(Gravity.CENTER);
+        bar.setBackground(rounded(PANEL, BORDER, 18));
+        String[] labels = {"⌂\nBeranda", "◉\nWhatsApp", "↻\nOtomasi", "✦\nAI"};
+        String[] keys = {"home", "whatsapp", "automation", "ai"};
+        for (int i = 0; i < labels.length; i++) {
+            final String key = keys[i];
+            Button button = new Button(this);
+            button.setText(labels[i]);
+            button.setTextSize(11);
+            button.setAllCaps(false);
+            button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+            button.setMinHeight(dp(52));
+            button.setPadding(dp(2), dp(2), dp(2), dp(2));
+            button.setOnClickListener(v -> showTab(key));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(54), 1f);
+            params.setMargins(dp(2), 0, dp(2), 0);
+            bar.addView(button, params);
+            navigationButtons[i] = button;
+        }
+        return bar;
+    }
+
+    private void showTab(String tab) {
+        activeTab = tab;
+        if (homeSection != null) homeSection.setVisibility("home".equals(tab) ? View.VISIBLE : View.GONE);
+        if (whatsappSection != null) whatsappSection.setVisibility("whatsapp".equals(tab) ? View.VISIBLE : View.GONE);
+        if (automationSection != null) automationSection.setVisibility("automation".equals(tab) ? View.VISIBLE : View.GONE);
+        if (aiSection != null) aiSection.setVisibility("ai".equals(tab) ? View.VISIBLE : View.GONE);
+        int active = "home".equals(tab) ? 0 : "whatsapp".equals(tab) ? 1 : "automation".equals(tab) ? 2 : 3;
+        for (int i = 0; i < navigationButtons.length; i++) {
+            Button button = navigationButtons[i];
+            if (button == null) continue;
+            button.setTextColor(i == active ? WHITE : MUTED);
+            button.setBackground(rounded(i == active ? ACCENT : PANEL, i == active ? ACCENT : PANEL, 13));
+        }
+        if (page != null) page.requestLayout();
+    }
+
+    private void toggleEmbeddedServer() {
+        if (!serverTransition.isEmpty()) return;
+        if (runtimeOnline) stopEmbeddedServer();
+        else startEmbeddedServer();
+    }
+
+    private void startEmbeddedServer() {
+        if (!serverTransition.isEmpty() || runtimeOnline) return;
+        preferences.edit().putBoolean(PREF_SERVER_ENABLED, true).apply();
+        serverTransition = "starting";
+        runtimeOnline = false;
+        updateServerButton();
+        backendStatus.setText("SERVER SEDANG DINYALAKAN…");
+        backendStatus.setTextColor(ACCENT);
+        controllerStatus.setText("Menyiapkan runtime lokal. Biasanya perlu beberapa detik.");
+        actionStatus.setText("Menyalakan server lokal…");
+        actionStatus.setTextColor(MUTED);
+        startRuntimeService();
+        handler.postDelayed(() -> {
+            if ("starting".equals(serverTransition) && !runtimeOnline) {
+                serverTransition = "";
+                updateServerButton();
+                actionStatus.setText("Server belum merespons. Tekan Periksa Status atau buka ulang aplikasi untuk diagnosis.");
+                actionStatus.setTextColor(RED);
+                refreshStatus();
+            }
+        }, 15000);
+    }
+
+    private void stopEmbeddedServer() {
+        if (!serverTransition.isEmpty()) return;
+        preferences.edit().putBoolean(PREF_SERVER_ENABLED, false).apply();
+        serverTransition = "stopping";
+        updateServerButton();
+        backendStatus.setText("SERVER SEDANG DIMATIKAN…");
+        backendStatus.setTextColor(MUTED);
+        controllerStatus.setText("Menghentikan runtime lokal; sesi dan pengaturan disimpan.");
+        actionStatus.setText("Mematikan server lokal…");
+        actionStatus.setTextColor(MUTED);
         try {
             Intent intent = new Intent(this, NodeService.class);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent);
-            } else {
-                startService(intent);
-            }
+            intent.setAction(NodeService.ACTION_STOP_RUNTIME);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent);
+            else startService(intent);
         } catch (RuntimeException error) {
+            serverTransition = "";
+            actionStatus.setText("Tidak dapat meminta server berhenti: " + safeMessage(error));
+            actionStatus.setTextColor(RED);
+            updateServerButton();
+            return;
+        }
+        handler.postDelayed(() -> {
+            serverTransition = "";
+            refreshStatus();
+            updateServerButton();
+            actionStatus.setText("Server lokal dimatikan. Tekan Nyalakan Server untuk mengaktifkannya lagi.");
+            actionStatus.setTextColor(MUTED);
+        }, 1800);
+    }
+
+    private void updateServerButton() {
+        if (serverToggleButton == null) return;
+        if ("starting".equals(serverTransition)) {
+            serverToggleButton.setText("MENYIAPKAN SERVER…");
+            serverToggleButton.setEnabled(false);
+            serverToggleButton.setBackground(rounded(0xFF34425C, 0xFF34425C, 11));
+        } else if ("stopping".equals(serverTransition)) {
+            serverToggleButton.setText("MEMATIKAN SERVER…");
+            serverToggleButton.setEnabled(false);
+            serverToggleButton.setBackground(rounded(0xFF34425C, 0xFF34425C, 11));
+        } else if (runtimeOnline) {
+            serverToggleButton.setText("MATIKAN SERVER");
+            serverToggleButton.setEnabled(true);
+            serverToggleButton.setBackground(rounded(0xFFB64252, 0xFFB64252, 11));
+        } else {
+            serverToggleButton.setText("NYALAKAN SERVER");
+            serverToggleButton.setEnabled(true);
+            serverToggleButton.setBackground(rounded(ACCENT, ACCENT, 11));
+        }
+    }
+
+    private void startRuntimeService() {
+        try {
+            Intent intent = new Intent(this, NodeService.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent);
+            else startService(intent);
+        } catch (RuntimeException error) {
+            serverTransition = "";
+            updateServerButton();
             if (actionStatus != null) {
-                actionStatus.setText("Tidak dapat memulai runtime Android: " + safeMessage(error));
+                actionStatus.setText("Tidak dapat memulai runtime: " + safeMessage(error));
                 actionStatus.setTextColor(RED);
             }
         }
+    }
+
+    private void ensureRuntimeService() {
+        boolean wanted = preferences == null || preferences.getBoolean(PREF_SERVER_ENABLED, true);
+        if (!wanted) {
+            runtimeOnline = false;
+            updateServerButton();
+            backendStatus.setText("SERVER MATI");
+            backendStatus.setTextColor(MUTED);
+            controllerStatus.setText("Server dimatikan dari aplikasi. Tekan Nyalakan Server bila diperlukan.");
+            return;
+        }
+        startRuntimeService();
     }
 
     private LinearLayout addCard(String title) {
@@ -207,7 +404,7 @@ public class MainActivity extends Activity {
         card.setBackground(rounded(PANEL, BORDER, 16));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.bottomMargin = dp(14);
-        page.addView(card, params);
+        activeSection.addView(card, params);
         TextView heading = addText(card, title, 15, WHITE, true);
         heading.setLetterSpacing(0.025f);
         heading.setPadding(0, 0, 0, dp(5));
@@ -283,7 +480,7 @@ public class MainActivity extends Activity {
         return checkBox;
     }
 
-    private void addButton(LinearLayout parent, String label, int color, Runnable action) {
+    private Button addButton(LinearLayout parent, String label, int color, Runnable action) {
         Button button = new Button(this);
         button.setText(label);
         button.setTextColor(WHITE);
@@ -296,6 +493,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.bottomMargin = dp(9);
         parent.addView(button, params);
+        return button;
     }
 
     private void addGap(LinearLayout parent, int height) {
@@ -320,6 +518,12 @@ public class MainActivity extends Activity {
     }
 
     private void startWhatsApp() {
+        if (!runtimeOnline) {
+            actionStatus.setText("Nyalakan Server lokal dulu dari tab Beranda.");
+            actionStatus.setTextColor(RED);
+            showTab("home");
+            return;
+        }
         String phone = digits(phoneInput.getText().toString());
         if (phone.length() < 10 || phone.length() > 15) {
             actionStatus.setText("Masukkan nomor internasional yang valid, misalnya 6281234567890.");
@@ -343,6 +547,12 @@ public class MainActivity extends Activity {
     }
 
     private void sendMessage() {
+        if (!runtimeOnline) {
+            actionStatus.setText("Nyalakan Server lokal dulu dari tab Beranda.");
+            actionStatus.setTextColor(RED);
+            showTab("home");
+            return;
+        }
         String number = digits(recipientInput.getText().toString());
         String text = messageInput.getText().toString().trim();
         if (number.length() < 8 || number.length() > 15 || text.isEmpty()) {
@@ -362,6 +572,12 @@ public class MainActivity extends Activity {
     }
 
     private void saveAutoReply() {
+        if (!runtimeOnline) {
+            actionStatus.setText("Nyalakan Server lokal dulu dari tab Beranda.");
+            actionStatus.setTextColor(RED);
+            showTab("home");
+            return;
+        }
         boolean enabled = autoReplyEnabled.isChecked();
         String trigger = triggerInput.getText().toString().trim();
         String reply = replyInput.getText().toString().trim();
@@ -465,6 +681,12 @@ public class MainActivity extends Activity {
     }
 
     private void saveAutomation() {
+        if (!runtimeOnline) {
+            actionStatus.setText("Nyalakan Server lokal dulu dari tab Beranda.");
+            actionStatus.setTextColor(RED);
+            showTab("home");
+            return;
+        }
         try {
             int cooldown = Integer.parseInt(automationCooldownInput.getText().toString().trim());
             int maxReplies = Integer.parseInt(automationMaxRepliesInput.getText().toString().trim());
@@ -504,6 +726,11 @@ public class MainActivity extends Activity {
     }
 
     private void performAction(String method, String path, JSONObject body, String label) {
+        if (!runtimeOnline) {
+            actionStatus.setText("Server lokal sedang mati. Nyalakan dari tab Beranda terlebih dahulu.");
+            actionStatus.setTextColor(RED);
+            return;
+        }
         actionStatus.setText(label + "…");
         actionStatus.setTextColor(MUTED);
         new Thread(() -> {
@@ -538,6 +765,7 @@ public class MainActivity extends Activity {
             JSONObject config = null;
             JSONObject advancedConfig = null;
             JSONObject advancedStats = null;
+            JSONObject buildInfo = null;
             String systemError = null;
             String whatsappError = null;
             try {
@@ -546,6 +774,11 @@ public class MainActivity extends Activity {
                 systemError = safeMessage(error);
             }
             if (system != null) {
+                try {
+                    buildInfo = apiRequest("GET", "/api/build", null);
+                } catch (Exception ignored) {
+                    buildInfo = null;
+                }
                 try {
                     whatsapp = apiRequest("GET", "/api/whatsapp/status", null);
                 } catch (Exception error) {
@@ -576,31 +809,51 @@ public class MainActivity extends Activity {
             final JSONObject finalConfig = config;
             final JSONObject finalAdvancedConfig = advancedConfig;
             final JSONObject finalAdvancedStats = advancedStats;
+            final JSONObject finalBuildInfo = buildInfo;
             final String finalSystemError = systemError;
             final String finalWhatsappError = whatsappError;
             runOnUiThread(() -> {
                 try {
                     if (finalSystem == null) {
-                        backendStatus.setText("Menunggu runtime lokal • " + API_BASE);
-                        backendStatus.setTextColor(RED);
-                        controllerStatus.setText("Menunggu server Node.js tertanam. " + (finalSystemError == null ? "" : finalSystemError));
-                        whatsappStatus.setText("WhatsApp: belum dapat diperiksa");
-                        whatsappStatus.setTextColor(MUTED);
-                        pairingInfo.setText("Runtime lokal sedang disiapkan. Biarkan aplikasi beberapa saat saat pertama dibuka.");
+                        runtimeOnline = false;
+                        boolean wanted = preferences.getBoolean(PREF_SERVER_ENABLED, true);
+                        backendStatus.setText(wanted ? "SERVER BELUM MERESPONS" : "SERVER MATI");
+                        backendStatus.setTextColor(wanted ? RED : MUTED);
+                        controllerStatus.setText(wanted
+                                ? "Server belum siap atau gagal dimulai. Tunggu sebentar lalu tekan Periksa Status."
+                                : "Server dimatikan dari aplikasi. Pengaturan tetap tersimpan.");
+                        homeWhatsAppStatus.setText("WhatsApp • " + (wanted ? "status belum tersedia" : "server mati"));
+                        homeWhatsAppStatus.setTextColor(MUTED);
+                        if (!wanted && !"stopping".equals(serverTransition)) {
+                            pairingInfo.setText("Server sedang mati. Nyalakan server dari tab Beranda untuk memakai fitur WhatsApp dan AI.");
+                            whatsappStatus.setText("WhatsApp: server lokal mati");
+                        }
+                        updateServerButton();
+                        if (buildInfoStatus != null) buildInfoStatus.setText("API lokal: " + API_BASE + " • tidak terhubung");
                     } else {
-                        backendStatus.setText("Runtime lokal AKTIF • " + finalSystem.optString("server", "SKYWA"));
+                        runtimeOnline = true;
+                        if ("starting".equals(serverTransition)) serverTransition = "";
+                        backendStatus.setText("SERVER AKTIF");
                         backendStatus.setTextColor(GREEN);
-                        controllerStatus.setText("Controller: " + finalSystem.optString("controller", "unknown")
-                                + " • Database: " + finalSystem.optString("database", "unknown")
-                                + " • Runtime: " + finalSystem.optString("runtime", "embedded-android"));
+                        controllerStatus.setText("API aktif • database " + finalSystem.optString("database", "unknown")
+                                + " • WhatsApp " + finalSystem.optString("whatsapp_state", "unknown"));
+                        if (finalBuildInfo != null && buildInfoStatus != null) {
+                            buildInfoStatus.setText("Versi " + finalBuildInfo.optString("appVersion", "unknown")
+                                + " • runtime Node " + finalBuildInfo.optString("nodeVersion", "unknown"));
+                        }
+                        updateServerButton();
                         if (finalWhatsapp == null) {
-                            whatsappStatus.setText("WhatsApp: " + (finalWhatsappError == null ? "tidak diketahui" : finalWhatsappError));
+                            whatsappStatus.setText("WhatsApp: status belum dapat dibaca. Tekan Periksa Status lagi.");
                             whatsappStatus.setTextColor(RED);
+                            homeWhatsAppStatus.setText("WhatsApp • status belum tersedia");
+                            homeWhatsAppStatus.setTextColor(MUTED);
                         } else {
                             boolean connected = finalWhatsapp.optBoolean("connected", false);
                             String state = finalWhatsapp.optString("state", "unknown");
                             whatsappStatus.setText("WhatsApp: " + (connected ? "TERHUBUNG" : state));
                             whatsappStatus.setTextColor(connected ? GREEN : WHITE);
+                            homeWhatsAppStatus.setText("WhatsApp • " + (connected ? "TERHUBUNG" : "BELUM TERHUBUNG"));
+                            homeWhatsAppStatus.setTextColor(connected ? GREEN : MUTED);
                             String code = finalWhatsapp.optString("pairing", "");
                             String qr = finalWhatsapp.optString("qr", "");
                             if (!code.isEmpty()) {

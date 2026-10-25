@@ -27,8 +27,10 @@ public final class NodeService extends Service {
     private static final String CHANNEL_ID = "skywa_embedded_runtime";
     private static final int NOTIFICATION_ID = 4201;
     private static final String DIAGNOSTIC_FILE = "skywa-runtime-error.txt";
+    public static final String ACTION_STOP_RUNTIME = "com.skywa.action.STOP_RUNTIME";
 
     private static volatile boolean runtimeStartedInProcess = false;
+    private volatile boolean shutdownRequested = false;
     private PowerManager.WakeLock wakeLock;
 
     @Override
@@ -41,6 +43,12 @@ public final class NodeService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent != null && ACTION_STOP_RUNTIME.equals(intent.getAction())) {
+            shutdownRequested = true;
+            stopForeground(true);
+            stopSelf(startId);
+            return START_NOT_STICKY;
+        }
         if (!runtimeStartedInProcess) {
             runtimeStartedInProcess = true;
             Thread runtimeThread = new Thread(this::startEmbeddedNode, "skywa-node-runtime");
@@ -302,6 +310,7 @@ public final class NodeService extends Service {
     }
 
     @Override
+    @Override
     public void onDestroy() {
         runtimeStartedInProcess = false;
         if (wakeLock != null && wakeLock.isHeld()) {
@@ -312,6 +321,12 @@ public final class NodeService extends Service {
             }
         }
         super.onDestroy();
+        if (shutdownRequested) {
+            // Native node::Start blocks its runtime thread. Stopping the Android
+            // Service alone does not terminate that native event loop, so an
+            // explicit user OFF action must end this dedicated process.
+            android.os.Process.killProcess(android.os.Process.myPid());
+        }
     }
 
     @Override

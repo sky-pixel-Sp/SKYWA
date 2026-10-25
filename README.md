@@ -20,9 +20,19 @@ The standalone integration source has been added on the `feat/standalone-android
 
 The pinned Node.js mobile binary currently comes from a prerelease mobile build based on Node.js 24.22.1. The preparation script checks the exact SHA-256 digest before using it. See [Standalone Android Runtime](docs/STANDALONE_ANDROID_RUNTIME.md).
 
+## Simple runtime controls (v1.5.0)
+
+The native app has four bottom tabs: **Beranda**, **WhatsApp**, **Otomasi**, and **AI**. The Beranda tab includes a real runtime ON/OFF control:
+- **Nyalakan Server** starts the embedded Node.js API and automation engine from Android.
+- **Matikan Server** requests shutdown of the isolated runtime process, rather than just disconnecting WhatsApp.
+- The requested ON/OFF state is stored in app preferences and restored when the application is reopened.
+- Turning the local server OFF leaves the Android UI available; server-dependent buttons explain that the server must be started first.
+- WhatsApp connect/disconnect remains separate from the local runtime switch.
+
 ## Existing app features
 
-- Native Android status and control UI.
+- Native Android status/control UI with four labeled bottom tabs.
+- In-app control to start/stop the embedded local server, separate from WhatsApp connect/disconnect.
 - WhatsApp phone-number pairing-code flow.
 - Outgoing text messages.
 - Keyword-based auto-reply.\n- Automation Pro: up to 30 match rules (`contains`, `exact`, `startsWith`), allowlist/blocklist, group filtering, chat cooldown, global rate limit, optional active hours, pause/resume and runtime metrics.
@@ -81,7 +91,7 @@ The preparation script is necessary because the large native runtime and `node_m
 - Do not claim standalone operation or successful live WhatsApp tests until the APK and physical-device tests have actually passed.
 
 
-## Runtime bundle hotfix (v1.4.1)
+## Runtime bundle hotfix (v1.5.0)
 
 Each Android build now stamps the source revision into the embedded Node.js bundle. On startup, SKYWA compares that fingerprint with the cached private runtime files and refreshes code when they differ, while preserving the `data` directory containing WhatsApp session and settings. This prevents source hotfixes from leaving an older API server in app-private storage even when app code versions had not been bumped.
 

@@ -31,7 +31,7 @@ app.get('/api/build', async (_req, res) => {
   }
   res.json({
     status: 'ok',
-    appVersion: '1.4.1',
+    appVersion: '1.5.0',
     bundleVersion,
     nodeVersion: process.version,
     uptime: Math.round(process.uptime()),

@@ -11,3 +11,7 @@
 2. Reboot once after installation if the embedded native runtime failed to initialize.
 3. If it still closes immediately, collect the Android crash report from Settings > Apps > SKYWA > App details or capture `adb logcat` filtered by `AndroidRuntime`, `SKYWA-NodeService`, and `libnode`. A Java exception and a native SIGSEGV have different root causes; don't guess based on the UI alone.
 4. CI can verify compilation and APK contents but cannot prove startup stability on a physical phone.
+
+
+## v1.5.0 runtime toggle
+The local server toggle uses an Android service action to request an explicit stop. The service tears down its wake lock and terminates the isolated runtime process because native Node `node::Start` blocks its runtime thread and `stopSelf` alone does not end that native event loop. The app stores the requested server state separately so ordinary status refreshes do not unexpectedly restart a user-stopped server.
