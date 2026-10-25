@@ -1,4 +1,6 @@
 import express from 'express';
+import {readFile} from 'node:fs/promises';
+import path from 'node:path';
 import {createServer} from 'node:http';
 import {initDB, getSetting, saveSetting} from '../database.js';
 import * as controller from '../lib/runtimeController.js';
@@ -96,7 +98,30 @@ if (storedBotConfig) {
 }
 
 const server = createServer(app);
-server.listen(PORT, BIND, () => console.log('[SKYWA] Server started on ' + BIND + ':' + PORT));
+async function resumeSavedWhatsAppSession() {
+  const credentialsPath = path.resolve(process.cwd(), 'data/sessions/main/creds.json');
+  try {
+    const credentials = JSON.parse(await readFile(credentialsPath, 'utf8'));
+    if (credentials.registered !== true) return;
+
+    console.log('[SKYWA] Saved WhatsApp session found; attempting reconnect.');
+    const result = await controller.startRuntime({});
+    if (result.status !== 'started') {
+      console.error('[SKYWA] Saved WhatsApp session could not restart:', result.error || result.status);
+    }
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.error('[SKYWA] Could not inspect saved WhatsApp session:', error.message || error);
+    }
+  }
+}
+
+server.listen(PORT, BIND, () => {
+  console.log('[SKYWA] Server started on ' + BIND + ':' + PORT);
+  // Run only after the local API is accepting requests. A fresh install has
+  // no creds.json and remains idle until the user pairs WhatsApp in the UI.
+  setTimeout(() => { void resumeSavedWhatsAppSession(); }, 750);
+});
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => server.close(() => process.exit(0)));
 
 export default app;
