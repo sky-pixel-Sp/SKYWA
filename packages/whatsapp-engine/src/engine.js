@@ -14,6 +14,7 @@ let autoReplyConfig = {enabled:false, trigger:'', reply:''};
 let aiConfig = {enabled:false, provider:'openrouter', apiKey:'', model:'openai/gpt-4o-mini', baseUrl:'http://127.0.0.1:11434/v1', systemPrompt:'Kamu adalah asisten WhatsApp yang ramah dan ringkas.', maxTokens:350, temperature:0.6};
 const aiHistories = new Map();
 const MAX_HISTORY_MESSAGES = 12;
+let automationConfig = normalizeAutomationConfig({});
 const maxRetries = 10, baseDelay = 2000;
 
 export const getCurrentState = () => state;
@@ -22,6 +23,17 @@ export const getPairingCode = () => pairing;
 export const getSock = () => sock;
 export const getAutoReplyConfig = () => ({...autoReplyConfig});
 export const getAIConfig = () => ({...aiConfig});
+export const getAutomationConfig = () => ({
+  ...automationConfig,
+  allowlist: [...automationConfig.allowlist],
+  blocklist: [...automationConfig.blocklist],
+  rules: automationConfig.rules.map(rule => ({...rule, keywords: [...rule.keywords]}))
+});
+export function setAutomationConfig(config = {}) {
+  automationConfig = normalizeAutomationConfig({...automationConfig, ...config});
+  return getAutomationConfig();
+}
+export {getAutomationStats, resetAutomationStats};
 export function setAIConfig(config = {}) { aiConfig = normalizeAIConfig({...aiConfig, ...config, hasApiKey: Boolean(config.hasApiKey || config.apiKey || aiConfig.apiKey)}); return getAIConfig(); }
 
 export function setAutoReplyConfig(config = {}) {
