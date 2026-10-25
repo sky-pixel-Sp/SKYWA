@@ -310,7 +310,6 @@ public final class NodeService extends Service {
     }
 
     @Override
-    @Override
     public void onDestroy() {
         runtimeStartedInProcess = false;
         if (wakeLock != null && wakeLock.isHeld()) {
