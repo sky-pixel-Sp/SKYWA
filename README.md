@@ -34,7 +34,9 @@ All live WhatsApp capabilities require internet connectivity and must be verifie
 
 The GitHub Actions workflow prepares the embedded runtime and then builds/verifies the debug APK:
 
-https://github.com/sky-pixel-Sp/SKYWA/actions
+**APK download (GitHub Releases):** https://github.com/sky-pixel-Sp/SKYWA/releases
+
+Build and verification logs: https://github.com/sky-pixel-Sp/SKYWA/actions
 
 For a Linux build machine with JDK 17, Android SDK/NDK, CMake, Node.js 24+, npm, `curl`, and `unzip`:
 
