@@ -74,9 +74,11 @@ public final class NodeService extends Service {
                     runtimeRoot.getAbsolutePath(),
                     tempRoot.getAbsolutePath(),
                     compileCache.getAbsolutePath());
+            runtimeStartedInProcess = false;
             Log.e(TAG, "Embedded Node.js exited with code " + result);
             updateNotification("Runtime berhenti (kode " + result + ") • buka ulang SKYWA");
         } catch (Throwable error) {
+            runtimeStartedInProcess = false;
             Log.e(TAG, "Embedded Node.js could not start", error);
             updateNotification("Runtime gagal mulai • periksa log diagnostik");
         }
@@ -271,6 +273,7 @@ public final class NodeService extends Service {
 
     @Override
     public void onDestroy() {
+        runtimeStartedInProcess = false;
         if (wakeLock != null && wakeLock.isHeld()) {
             try {
                 wakeLock.release();
