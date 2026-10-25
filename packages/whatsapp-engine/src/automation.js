@@ -14,6 +14,7 @@ const DEFAULTS = Object.freeze({
 
 const metrics = {
   received: 0,
+  commandReplies: 0,
   filtered: 0,
   rulesReplied: 0,
   staticReplied: 0,
@@ -205,6 +206,7 @@ export function getAutomationStats() {
 
 export function resetAutomationStats() {
   metrics.received = 0;
+  metrics.commandReplies = 0;
   metrics.filtered = 0;
   metrics.rulesReplied = 0;
   metrics.staticReplied = 0;
