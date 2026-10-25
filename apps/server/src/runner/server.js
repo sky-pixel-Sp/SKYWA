@@ -15,7 +15,7 @@ app.get('/api/health', (_req, res) => {
     status: h.controller === 'running' ? 'healthy' : h.controller === 'failed' ? 'degraded' : 'starting',
     version: process.version, uptime: Math.round(process.uptime()), server:'SKYWA WhatsApp Bot Studio',
     port:PORT, bind:BIND, database:initDB() ? 'connected' : 'disconnected',
-    controller:h.controller, whatsapp:h.whatsapp, mode:'B-Termux-Companion'
+    controller:h.controller, whatsapp:h.whatsapp, mode:'standalone-android'
   });
 });
 
@@ -24,14 +24,14 @@ app.get('/api/system/status', (_req, res) => {
   res.json({
     server:'SKYWA', uptime:Math.round(process.uptime()), controller:h.controller,
     whatsapp_state:h.whatsapp, connected:h.connected, database:initDB() ? 'connected' : 'disconnected',
-    mode:'B-Termux-Companion', backend:'Node.js', runtime:'Termux',
+    mode:'standalone-android', backend:'Node.js', runtime:'embedded-android',
     startTime:h.startTime ? new Date(h.startTime).toISOString() : null
   });
 });
 
-app.post('/api/system/start', async (req, res) => res.json({...await controller.startRuntime(req.body || {}), mode:'B-Termux-Companion'}));
+app.post('/api/system/start', async (req, res) => res.json({...await controller.startRuntime(req.body || {}), mode:'standalone-android'}));
 app.post('/api/system/stop', async (_req, res) => res.json({...await controller.stopRuntime(), note:'Session preserved'}));
-app.post('/api/system/restart', async (req, res) => res.json({...await controller.restartRuntime(req.body || {}), mode:'B-Termux-Companion'}));
+app.post('/api/system/restart', async (req, res) => res.json({...await controller.restartRuntime(req.body || {}), mode:'standalone-android'}));
 app.get('/api/whatsapp/status', (_req, res) => res.json(controller.getWhatsAppStatus()));
 app.post('/api/whatsapp/start', async (req, res) => res.json({...await controller.startRuntime(req.body || {}), endpoint:'whatsapp/start'}));
 app.post('/api/whatsapp/stop', async (_req, res) => res.json({...await controller.stopRuntime(), endpoint:'whatsapp/stop', note:'Disconnect only; session preserved'}));
@@ -66,7 +66,7 @@ app.get('/api/system/diagnostics', (_req, res) => {
   res.json({
     node_version:process.version, platform:process.platform, bind:BIND, port:PORT,
     memory_usage_mb:Math.round(process.memoryUsage().heapUsed / 1048576 * 100) / 100,
-    controller_state:h.controller, whatsapp_state:h.whatsapp, mode:'B-Termux-Companion'
+    controller_state:h.controller, whatsapp_state:h.whatsapp, mode:'standalone-android'
   });
 });
 
