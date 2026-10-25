@@ -151,8 +151,13 @@ function listenMessages(socket) {
       const ai = aiConfig;
       try {
         if (ai.enabled) {
-          const answer = await generateAIReply(ai, text);
+          const history = aiHistories.get(jid) || [];
+          await socket.sendPresenceUpdate('composing', jid).catch(() => {});
+          const answer = await generateAIReply(ai, text, {history});
           await socket.sendMessage(jid, {text:answer});
+          history.push({role:'user', content:text.slice(0,3000)}, {role:'assistant', content:answer.slice(0,3000)});
+          aiHistories.set(jid, history.slice(-MAX_HISTORY_MESSAGES));
+          await socket.sendPresenceUpdate('paused', jid).catch(() => {});
           logger.info({to:jid, provider:ai.provider, model:ai.model}, 'AI auto-reply sent');
         } else if (matchesStatic) {
           await socket.sendMessage(jid, {text:config.reply});
