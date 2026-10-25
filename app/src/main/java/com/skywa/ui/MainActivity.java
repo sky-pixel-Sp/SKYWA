@@ -276,7 +276,7 @@ public class MainActivity extends Activity {
             final String key = keys[i];
             Button button = new Button(this);
             button.setText(labels[i]);
-            button.setTextSize(11);
+            button.setTextSize(10);
             button.setAllCaps(false);
             button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
             button.setMinHeight(dp(52));
@@ -308,52 +308,73 @@ public class MainActivity extends Activity {
     }
 
     private void showSetupGuide() {
-        final String[] steps = {
-            "1. Nyalakan Server",
-            "2. Hubungkan WhatsApp",
-            "3. Kirim pesan uji",
-            "4. Aktifkan satu aturan auto-reply",
-            "5. Konfigurasi AI (opsional)"
+        showSetupGuideStep(0);
+    }
+
+    private void showSetupGuideStep(int step) {
+        final String[] titles = {
+            "Nyalakan Server",
+            "Hubungkan WhatsApp",
+            "Kirim pesan uji",
+            "Aktifkan satu aturan auto-reply",
+            "Konfigurasi AI (opsional)"
         };
-        new AlertDialog.Builder(this)
-            .setTitle("Panduan cepat SKYWA")
-            .setMessage("Ikuti urutan ini. Kamu tidak perlu mengatur semuanya sekaligus.\n\nServer harus aktif sebelum pairing, menyimpan otomasi, atau menguji AI.")
-            .setItems(steps, (dialog, which) -> {
-                if (which == 0) {
-                    showTab("home");
-                    if (!runtimeOnline) startEmbeddedServer();
-                    else {
-                        actionStatus.setText("Server sudah aktif. Langkah berikutnya: hubungkan WhatsApp.");
-                        actionStatus.setTextColor(GREEN);
-                        showSetupGuide();
-                    }
-                } else if (which == 1) {
-                    showTab("whatsapp");
-                    actionStatus.setText("Masukkan nomor WhatsApp dalam format internasional lalu tekan Minta Kode Pairing.");
-                    actionStatus.setTextColor(MUTED);
-                } else if (which == 2) {
-                    showTab("whatsapp");
-                    if (recipientInput != null && recipientInput.getText().toString().trim().isEmpty() && phoneInput != null) {
-                        recipientInput.setText(phoneInput.getText().toString().trim());
-                    }
-                    if (messageInput != null && messageInput.getText().toString().trim().isEmpty()) {
-                        messageInput.setText("Tes pesan SKYWA. Mohon abaikan.");
-                    }
-                    actionStatus.setText("Pastikan WhatsApp sudah terhubung. Periksa nomor tujuan dan teks di kartu Kirim Pesan, lalu tekan Kirim Pesan untuk menguji pengiriman nyata.");
-                    actionStatus.setTextColor(MUTED);
-                } else if (which == 3) {
-                    showTab("automation");
-                    applyStarterPreset();
-                } else {
-                    showTab("ai");
-                    startActivity(new Intent(this, AISettingsActivity.class));
+        final String[] messages = {
+            "Nyalakan runtime lokal SKYWA dahulu. Server perlu aktif sebelum pairing, menyimpan aturan, atau menguji AI.",
+            "Masukkan nomor WhatsApp dalam format internasional tanpa tanda +, lalu minta kode pairing dan selesaikan langkah Perangkat tertaut di aplikasi WhatsApp.",
+            "Setelah status WhatsApp terhubung, periksa nomor tujuan dan teks pesan pada kartu Kirim Pesan. Tekan tombol Kirim Pesan sendiri untuk menguji pengiriman nyata.",
+            "Pilih satu paket contoh, periksa balasannya, lalu tekan Simpan Auto-reply dan Simpan Automation Pro. Aturan tidak dikirim ke server sampai kamu menekan tombol simpan.",
+            "AI bersifat opsional. Jika diaktifkan, isi pesan WhatsApp dan sebagian konteks percakapan dapat dikirim ke provider AI yang dipilih. Uji provider sebelum mengaktifkan balasan AI."
+        };
+        if (step < 0 || step >= titles.length) return;
+        AlertDialog.Builder dialog = new AlertDialog.Builder(this)
+            .setTitle("Setup " + (step + 1) + "/5 • " + titles[step])
+            .setMessage(messages[step])
+            .setNegativeButton("NANTI", (d, which) -> d.dismiss());
+        String action = step == 3 ? "PILIH PAKET" : step == 4 ? "BUKA AI (OPSIONAL)" : "LANJUT";
+        dialog.setPositiveButton(action, (d, which) -> {
+            if (step == 0) {
+                showTab("home");
+                if (!runtimeOnline) startEmbeddedServer();
+                else {
+                    actionStatus.setText("Server sudah aktif.");
+                    actionStatus.setTextColor(GREEN);
                 }
-            })
-            .setNegativeButton("NANTI", (dialog, which) -> dialog.dismiss())
-            .show();
+                showSetupGuideStep(1);
+            } else if (step == 1) {
+                showTab("whatsapp");
+                actionStatus.setText("Selesaikan pairing WhatsApp di layar ini sebelum mengirim pesan uji.");
+                actionStatus.setTextColor(MUTED);
+                showSetupGuideStep(2);
+            } else if (step == 2) {
+                showTab("whatsapp");
+                if (recipientInput != null && recipientInput.getText().toString().trim().isEmpty() && phoneInput != null) {
+                    recipientInput.setText(phoneInput.getText().toString().trim());
+                }
+                if (messageInput != null && messageInput.getText().toString().trim().isEmpty()) {
+                    messageInput.setText("Tes pesan SKYWA. Mohon abaikan.");
+                }
+                actionStatus.setText("Kirim pesan uji secara manual, pastikan hasilnya benar, lalu lanjutkan ke aturan auto-reply.");
+                actionStatus.setTextColor(MUTED);
+                showSetupGuideStep(3);
+            } else if (step == 3) {
+                showTab("automation");
+                applyStarterPreset(true);
+            } else {
+                showTab("ai");
+                actionStatus.setText("AI opsional. Konfirmasikan provider, endpoint, dan privasi sebelum menyimpan.");
+                actionStatus.setTextColor(MUTED);
+                startActivity(new Intent(this, AISettingsActivity.class));
+            }
+        });
+        dialog.show();
     }
 
     private void applyStarterPreset() {
+        applyStarterPreset(false);
+    }
+
+    private void applyStarterPreset(boolean advanceSetup) {
         final String[] presets = {
             "Toko online",
             "Customer service",
@@ -386,6 +407,7 @@ public class MainActivity extends Activity {
                 showTab("automation");
                 actionStatus.setText("Paket " + presets[which] + " diisi. Periksa aturan, lalu tekan Simpan Automation Pro dan Simpan Auto-reply.");
                 actionStatus.setTextColor(GREEN);
+                if (advanceSetup) showSetupGuideStep(4);
             })
             .setNegativeButton("BATAL", (dialog, which) -> dialog.dismiss())
             .show();
