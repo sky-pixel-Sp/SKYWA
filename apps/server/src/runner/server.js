@@ -152,7 +152,8 @@ app.post('/api/ai/config', (req, res) => {
     const body = req.body || {};
     const current = getAIConfig();
     const apiKey = typeof body.apiKey === 'string' && body.apiKey.trim() ? body.apiKey.trim() : current.apiKey;
-    const config = normalizeAIConfig({...current, ...body, apiKey, hasApiKey:Boolean(apiKey)});
+    const fallbackApiKey = typeof body.fallbackApiKey === 'string' && body.fallbackApiKey.trim() ? body.fallbackApiKey.trim() : current.fallbackApiKey;
+    const config = normalizeAIConfig({...current, ...body, apiKey, fallbackApiKey, hasApiKey:Boolean(apiKey)});
     if (!saveSetting('aiConfig', config)) {
       return res.status(500).json({status:'failed', error:'Gagal menyimpan konfigurasi ke penyimpanan lokal. Periksa ruang penyimpanan dan izin aplikasi, lalu coba lagi.'});
     }
