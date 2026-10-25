@@ -71,3 +71,13 @@ Source integration has been added, but it is **not yet evidence that the final p
 - Behavior when notification permission is denied and when the phone's OEM battery restrictions are enabled.
 
 A green JavaScript unit test or successful Gradle build does not prove live WhatsApp pairing, message delivery, or long-running background reliability.
+
+## Local API authentication (v1.7 hardening)
+
+The Android service generates a 256-bit random token on first startup and stores it in app-private files. The native bridge passes it into the embedded Node.js process as `SKYWA_API_TOKEN`. The Android UI obtains the same token from private storage and sends it with `X-Skywa-Token`. The backend middleware protects every `/api/*` route except the minimal `/api/health` readiness endpoint. Cleartext is disabled by default and is permitted only for `127.0.0.1` and `localhost` in the network security configuration.
+
+The embedded server must remain loopback-only. This token protects against unrelated local apps calling the API without the token; it does not protect against a rooted device, malicious code running with SKYWA's UID, or a compromised SKYWA process. The token file is app-private but is not currently encrypted with Android Keystore; evaluate Keystore-backed encryption as a follow-up.
+
+## Versioning and release artifacts
+
+`app/build.gradle` is the single source of truth for Android `versionName` and `versionCode`. The runtime preparation script copies these into the embedded bundle so `/api/build` reports the version actually associated with the APK. CI artifact names contain both version and commit SHA, and APK verification checks the app version, code, ARM64-only native ABI, runtime libraries, and embedded server/engine files. The `apk-downloads` branch is published only after a push to `release/v1.7`; ordinary bug-fix branches never trigger that publishing job.

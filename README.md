@@ -20,9 +20,11 @@ The standalone integration source has been added on the `feat/standalone-android
 
 The pinned Node.js mobile binary currently comes from a prerelease mobile build based on Node.js 24.22.1. The preparation script checks the exact SHA-256 digest before using it. See [Standalone Android Runtime](docs/STANDALONE_ANDROID_RUNTIME.md).
 
-## Simple runtime controls (v1.5.0)
+## Native app controls (v1.7.0 target)
 
-The native app has four bottom tabs: **Beranda**, **WhatsApp**, **Otomasi**, and **AI**. The Beranda tab includes a real runtime ON/OFF control:
+The security hardening work is being developed on `fix/audit-v1.7-hardening`; do not treat this branch as a released APK until its CI and release artifacts are verified.
+
+The native app has five bottom tabs: **Beranda**, **WhatsApp**, **Otomasi**, **AI**, and **Pengaturan**. The Beranda tab includes a real runtime ON/OFF control:
 - **Nyalakan Server** starts the embedded Node.js API and automation engine from Android.
 - **Matikan Server** requests shutdown of the isolated runtime process, rather than just disconnecting WhatsApp.
 - The requested ON/OFF state is stored in app preferences and restored when the application is reopened.
@@ -31,11 +33,12 @@ The native app has four bottom tabs: **Beranda**, **WhatsApp**, **Otomasi**, and
 
 ## Existing app features
 
-- Native Android status/control UI with four labeled bottom tabs.
+- Native Android status/control UI with five labeled bottom tabs.
 - In-app control to start/stop the embedded local server, separate from WhatsApp connect/disconnect.
 - WhatsApp phone-number pairing-code flow.
 - Outgoing text messages.
-- Keyword-based auto-reply.\n- Automation Pro: up to 30 match rules (`contains`, `exact`, `startsWith`), allowlist/blocklist, group filtering, chat cooldown, global rate limit, optional active hours, pause/resume and runtime metrics.
+- Keyword-based auto-reply.
+- Automation Pro: up to 30 match rules (`contains`, `exact`, `startsWith`), allowlist/blocklist, group filtering, chat cooldown, global rate limit, optional active hours, pause/resume and runtime metrics.
 - Baileys session persistence and reconnection logic.
 
 All live WhatsApp capabilities require internet connectivity and must be verified on a device before release.
@@ -44,11 +47,9 @@ All live WhatsApp capabilities require internet connectivity and must be verifie
 
 The GitHub Actions workflow prepares the embedded runtime and then builds/verifies the debug APK:
 
-**Download latest standalone APK (ARM64):** https://raw.githubusercontent.com/sky-pixel-Sp/SKYWA/apk-downloads/SKYWA-standalone-arm64.apk
+**Versioned build artifacts:** open [GitHub Actions](https://github.com/sky-pixel-Sp/SKYWA/actions) and select a successful run on the branch or PR you want. Each CI artifact is named with the app version and commit SHA; download the ARM64 debug APK from that run. Artifacts expire after 14 days.
 
-Open the [APK download branch](https://github.com/sky-pixel-Sp/SKYWA/tree/apk-downloads) if you prefer to download it from the repository UI. The workflow updates this APK after a successful build from the standalone or `fix/**` branch.
-
-This is a GitHub prerelease build. The APK is distributed as a release asset rather than committed to the source branch.
+The `apk-downloads` branch is updated only by a push to the explicitly designated `release/v1.7` branch after CI and APK verification succeed. Ordinary `fix/**` pushes and pull-request builds do not publish over that download branch. This hardening branch has not been device-tested and is not yet a production release.
 
 Build and verification logs: https://github.com/sky-pixel-Sp/SKYWA/actions
 
@@ -58,7 +59,7 @@ Build and verification logs: https://github.com/sky-pixel-Sp/SKYWA/actions
 2. Open the downloaded file from Downloads. If Android asks, allow your browser or file manager to **Install unknown apps**, then return and tap **Install**.
 3. If an older SKYWA debug build is installed and Android reports a signature conflict, uninstall the older build first and install the new one. **Uninstalling erases that installation's local settings and WhatsApp session**, so only do this if you can pair again.
 4. Open SKYWA and wait for the foreground service notification/runtime startup to settle. Keep internet access enabled for WhatsApp and OpenRouter.
-5. To configure AI, open **Pengaturan AI**. For OpenRouter, choose the provider, enter the API key and model ID, save, and run the test prompt. For a local provider, the endpoint and model server must already be reachable from the phone; the APK does not include model weights.
+5. To configure AI, open **AI** or **Pengaturan → Buka Pengaturan AI**. For OpenRouter, choose the provider, enter the API key and model ID, save, and run the test prompt. If AI auto-reply is enabled, WhatsApp message contents and conversation context may be sent to the selected AI provider. For a local provider, the endpoint and model server must already be reachable from the phone; the APK does not include model weights.
 6. Link WhatsApp using the pairing-code flow in the app, then test with a separate chat before enabling automatic replies for normal use.
 
 **Device requirement:** this build targets ARM64 Android devices. CI verifies source tests, APK compilation, and package contents; it does not replace a real-device test of launch, WhatsApp pairing, message sending, and background behavior.
@@ -96,3 +97,10 @@ The preparation script is necessary because the large native runtime and `node_m
 Each Android build now stamps the source revision into the embedded Node.js bundle. On startup, SKYWA compares that fingerprint with the cached private runtime files and refreshes code when they differ, while preserving the `data` directory containing WhatsApp session and settings. This prevents source hotfixes from leaving an older API server in app-private storage even when app code versions had not been bumped.
 
 The native UI also turns non-JSON/HTML 404 responses into a short recovery message instead of printing the server's HTML document. Several lower-priority settings cards can be collapsed to make the main screen shorter on phones.
+
+
+## Local API security
+
+The embedded backend binds to loopback and requires the installation-specific `X-Skywa-Token` header on every `/api/*` endpoint except `/api/health`. The token is generated at runtime and kept in app-private storage; it must not be copied into logs, source control, or diagnostic reports. Android cleartext networking is restricted to `127.0.0.1` and `localhost`.
+
+This security design has source-level and CI tests, but it is not a substitute for testing with a real Android device. Do not expose the local backend to a LAN or public network, and do not share WhatsApp session files or API keys.
