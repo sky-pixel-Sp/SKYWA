@@ -1,5 +1,7 @@
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import pino from 'pino';
+import {generateAIReply, normalizeAIConfig} from './ai-provider.js';
+import {normalizeAutomationConfig, findAutomationRule, checkAutomationAllowed, recordAutomationReply, recordAutomationEvent, getAutomationStats, resetAutomationStats} from './automation.js';
 
 const logger = pino({level:'info'});
 export const ConnectionState = {
@@ -9,6 +11,10 @@ export const ConnectionState = {
 };
 let sock = null, state = ConnectionState.DISCONNECTED, qr = null, pairing = null, retries = 0;
 let autoReplyConfig = {enabled:false, trigger:'', reply:''};
+let aiConfig = {enabled:false, provider:'openrouter', apiKey:'', model:'openai/gpt-4o-mini', baseUrl:'http://127.0.0.1:11434/v1', systemPrompt:'Kamu adalah asisten WhatsApp yang ramah dan ringkas.', maxTokens:350, temperature:0.6};
+const aiHistories = new Map();
+const MAX_HISTORY_MESSAGES = 12;
+let automationConfig = normalizeAutomationConfig({});
 const maxRetries = 10, baseDelay = 2000;
 
 export const getCurrentState = () => state;
@@ -16,6 +22,19 @@ export const getQRCode = () => qr;
 export const getPairingCode = () => pairing;
 export const getSock = () => sock;
 export const getAutoReplyConfig = () => ({...autoReplyConfig});
+export const getAIConfig = () => ({...aiConfig});
+export const getAutomationConfig = () => ({
+  ...automationConfig,
+  allowlist: [...automationConfig.allowlist],
+  blocklist: [...automationConfig.blocklist],
+  rules: automationConfig.rules.map(rule => ({...rule, keywords: [...rule.keywords]}))
+});
+export function setAutomationConfig(config = {}) {
+  automationConfig = normalizeAutomationConfig({...automationConfig, ...config});
+  return getAutomationConfig();
+}
+export {getAutomationStats, resetAutomationStats};
+export function setAIConfig(config = {}) { aiConfig = normalizeAIConfig({...aiConfig, ...config, hasApiKey: Boolean(config.hasApiKey || config.apiKey || aiConfig.apiKey)}); return getAIConfig(); }
 
 export function setAutoReplyConfig(config = {}) {
   const enabled = config.enabled === true;
@@ -130,13 +149,58 @@ function listenMessages(socket) {
       const text = extractText(message.message).trim();
       if (!text) continue;
       logger.info({from:jid}, 'Incoming message');
+      const command = text.toLowerCase().trim();
+      if (command === '/help' || command === '/start') {
+        await socket.sendMessage(jid, {text:'SKYWA Bot\\n/help — bantuan\\n/reset — hapus memori percakapan AI\\nAI dan auto-reply dikendalikan pemilik bot di aplikasi.'});
+        continue;
+      }
+      if (command === '/reset') {
+        aiHistories.delete(jid);
+        await socket.sendMessage(jid, {text:'Memori percakapan AI untuk chat ini sudah direset.'});
+        continue;
+      }
+      recordAutomationEvent('received');
       const config = autoReplyConfig;
-      if (!config.enabled || !config.reply || (config.trigger && !text.toLowerCase().includes(config.trigger.toLowerCase()))) continue;
+      const matchesStatic = config.enabled && config.reply && (!config.trigger || text.toLowerCase().includes(config.trigger.toLowerCase()));
+      const ai = aiConfig;
+      const advancedRule = automationConfig.rulesEnabled
+        ? findAutomationRule(text, automationConfig.rules)
+        : null;
+      const automationRequested = automationConfig.paused || Boolean(advancedRule) || matchesStatic || ai.enabled;
+      if (!automationRequested) continue;
+      const gate = checkAutomationAllowed(automationConfig, jid);
+      if (!gate.allowed) {
+        recordAutomationEvent('filtered');
+        logger.info({from:jid, reason:gate.reason}, 'Automation safety rule filtered message');
+        continue;
+      }
       try {
-        await socket.sendMessage(jid, {text:config.reply});
-        logger.info({to:jid}, 'Auto-reply sent');
+        if (advancedRule) {
+          await socket.sendMessage(jid, {text:advancedRule.reply});
+          recordAutomationReply(jid);
+          recordAutomationEvent('rulesReplied');
+          logger.info({to:jid, ruleId:advancedRule.id, keyword:advancedRule.matchedKeyword}, 'Advanced automation rule replied');
+        } else if (matchesStatic) {
+          await socket.sendMessage(jid, {text:config.reply});
+          recordAutomationReply(jid);
+          recordAutomationEvent('staticReplied');
+          logger.info({to:jid}, 'Auto-reply sent');
+        } else if (ai.enabled && !automationConfig.paused) {
+          const history = aiHistories.get(jid) || [];
+          await socket.sendPresenceUpdate('composing', jid).catch(() => {});
+          const answer = await generateAIReply(ai, text, {history});
+          await socket.sendMessage(jid, {text:answer});
+          history.push({role:'user', content:text.slice(0,3000)}, {role:'assistant', content:answer.slice(0,3000)});
+          aiHistories.set(jid, history.slice(-MAX_HISTORY_MESSAGES));
+          await socket.sendPresenceUpdate('paused', jid).catch(() => {});
+          recordAutomationReply(jid);
+          recordAutomationEvent('aiReplied');
+          logger.info({to:jid, provider:ai.provider, model:ai.model}, 'AI auto-reply sent');
+        }
       } catch (error) {
-        logger.error({err:error}, 'Auto-reply failed');
+        recordAutomationEvent('failures');
+        await socket.sendPresenceUpdate('paused', jid).catch(() => {});
+        logger.error({err:error, provider:ai.provider}, 'Auto-reply failed');
       }
     }
   });
