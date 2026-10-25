@@ -1,5 +1,6 @@
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import pino from 'pino';
+import {generateAIReply, normalizeAIConfig} from './ai-provider.js';
 
 const logger = pino({level:'info'});
 export const ConnectionState = {
@@ -9,6 +10,7 @@ export const ConnectionState = {
 };
 let sock = null, state = ConnectionState.DISCONNECTED, qr = null, pairing = null, retries = 0;
 let autoReplyConfig = {enabled:false, trigger:'', reply:''};
+let aiConfig = {enabled:false, provider:'openrouter', apiKey:'', model:'openai/gpt-4o-mini', baseUrl:'http://127.0.0.1:11434/v1', systemPrompt:'Kamu adalah asisten WhatsApp yang ramah dan ringkas.', maxTokens:350, temperature:0.6};
 const maxRetries = 10, baseDelay = 2000;
 
 export const getCurrentState = () => state;
@@ -16,6 +18,8 @@ export const getQRCode = () => qr;
 export const getPairingCode = () => pairing;
 export const getSock = () => sock;
 export const getAutoReplyConfig = () => ({...autoReplyConfig});
+export const getAIConfig = () => ({...aiConfig});
+export function setAIConfig(config = {}) { aiConfig = normalizeAIConfig({...aiConfig, ...config, hasApiKey: Boolean(config.hasApiKey || config.apiKey || aiConfig.apiKey)}); return getAIConfig(); }
 
 export function setAutoReplyConfig(config = {}) {
   const enabled = config.enabled === true;
@@ -131,12 +135,19 @@ function listenMessages(socket) {
       if (!text) continue;
       logger.info({from:jid}, 'Incoming message');
       const config = autoReplyConfig;
-      if (!config.enabled || !config.reply || (config.trigger && !text.toLowerCase().includes(config.trigger.toLowerCase()))) continue;
+      const matchesStatic = config.enabled && config.reply && (!config.trigger || text.toLowerCase().includes(config.trigger.toLowerCase()));
+      const ai = aiConfig;
       try {
-        await socket.sendMessage(jid, {text:config.reply});
-        logger.info({to:jid}, 'Auto-reply sent');
+        if (ai.enabled) {
+          const answer = await generateAIReply(ai, text);
+          await socket.sendMessage(jid, {text:answer});
+          logger.info({to:jid, provider:ai.provider, model:ai.model}, 'AI auto-reply sent');
+        } else if (matchesStatic) {
+          await socket.sendMessage(jid, {text:config.reply});
+          logger.info({to:jid}, 'Auto-reply sent');
+        }
       } catch (error) {
-        logger.error({err:error}, 'Auto-reply failed');
+        logger.error({err:error, provider:ai.provider}, 'Auto-reply failed');
       }
     }
   });
