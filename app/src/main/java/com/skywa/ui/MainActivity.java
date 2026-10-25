@@ -1,6 +1,7 @@
 package com.skywa.ui;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -154,6 +155,7 @@ public class MainActivity extends Activity {
         homeWhatsAppStatus = addText(activeSection, "WhatsApp • memeriksa status…", 14, WHITE, true);
 
         addText(activeSection, "Urutan mudah: 1) Nyalakan server  2) Hubungkan WhatsApp  3) Atur AI atau balasan.", 12, MUTED, false);
+        addButton(activeSection, "MULAI PANDUAN SETUP", GREEN, this::showSetupGuide);
 
         activeSection = whatsappSection;
         addText(activeSection, "WHATSAPP", 27, WHITE, true);
@@ -192,6 +194,7 @@ public class MainActivity extends Activity {
 
         LinearLayout automationCard = addCard("AUTOMATION PRO • MULTI-RULE");
         addText(automationCard, "Buat banyak aturan balasan, batasi frekuensi, atur jam aktif, abaikan grup, dan whitelist/blacklist nomor. Format aturan per baris: contains: harga, produk => Balasan untuk harga/produk. Mode tersedia: contains, exact, startsWith.", 13, MUTED, false);
+        addButton(automationCard, "ISI CONTOH OTOMASI SIAP PAKAI", GREEN, this::applyStarterPreset);
         automationRulesEnabled = addCheckBox(automationCard, "Aktifkan multi-rule automation");
         automationIgnoreGroups = addCheckBox(automationCard, "Abaikan pesan dari grup (disarankan)");
         automationHoursEnabled = addCheckBox(automationCard, "Batasi otomatisasi ke jam aktif");
@@ -290,6 +293,57 @@ public class MainActivity extends Activity {
             button.setBackground(rounded(i == active ? ACCENT : PANEL, i == active ? ACCENT : PANEL, 13));
         }
         if (page != null) page.requestLayout();
+    }
+
+    private void showSetupGuide() {
+        final String[] steps = {
+            "1. Nyalakan Server",
+            "2. Hubungkan WhatsApp",
+            "3. Pasang balasan otomatis",
+            "4. Atur AI (opsional)"
+        };
+        new AlertDialog.Builder(this)
+            .setTitle("Panduan cepat SKYWA")
+            .setMessage("Ikuti urutan ini. Kamu tidak perlu mengatur semuanya sekaligus.\n\nServer harus aktif sebelum pairing, menyimpan otomasi, atau menguji AI.")
+            .setItems(steps, (dialog, which) -> {
+                if (which == 0) {
+                    showTab("home");
+                    if (!runtimeOnline) startEmbeddedServer();
+                    else {
+                        actionStatus.setText("Server sudah aktif. Langkah berikutnya: hubungkan WhatsApp.");
+                        actionStatus.setTextColor(GREEN);
+                        showSetupGuide();
+                    }
+                } else if (which == 1) {
+                    showTab("whatsapp");
+                    actionStatus.setText("Masukkan nomor WhatsApp lalu tekan Minta Kode Pairing.");
+                    actionStatus.setTextColor(MUTED);
+                } else if (which == 2) {
+                    showTab("automation");
+                    applyStarterPreset();
+                } else {
+                    showTab("ai");
+                    startActivity(new Intent(this, AISettingsActivity.class));
+                }
+            })
+            .setNegativeButton("NANTI", (dialog, which) -> dialog.dismiss())
+            .show();
+    }
+
+    private void applyStarterPreset() {
+        if (autoReplyEnabled != null) autoReplyEnabled.setChecked(true);
+        if (triggerInput != null) triggerInput.setText("halo");
+        if (replyInput != null) replyInput.setText("Halo! Terima kasih sudah menghubungi kami. Ada yang bisa kami bantu?");
+        if (automationRulesEnabled != null) automationRulesEnabled.setChecked(true);
+        if (automationIgnoreGroups != null) automationIgnoreGroups.setChecked(true);
+        if (automationCooldownInput != null && automationCooldownInput.getText().toString().trim().isEmpty()) automationCooldownInput.setText("10");
+        if (automationMaxRepliesInput != null && automationMaxRepliesInput.getText().toString().trim().isEmpty()) automationMaxRepliesInput.setText("10");
+        if (automationRulesInput != null && automationRulesInput.getText().toString().trim().isEmpty()) {
+            automationRulesInput.setText("contains: halo => Halo! Terima kasih sudah menghubungi kami.\ncontains: harga => Produk apa yang ingin kamu tanyakan?\ncontains: jam buka => Silakan tanyakan cabang atau jadwal yang kamu butuhkan.");
+        }
+        showTab("automation");
+        actionStatus.setText("Contoh siap pakai sudah diisi. Periksa dan tekan Simpan sebelum digunakan.");
+        actionStatus.setTextColor(GREEN);
     }
 
     private void toggleEmbeddedServer() {
