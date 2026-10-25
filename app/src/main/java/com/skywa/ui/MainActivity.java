@@ -53,8 +53,9 @@ public class MainActivity extends Activity {
     private LinearLayout whatsappSection;
     private LinearLayout automationSection;
     private LinearLayout aiSection;
+    private LinearLayout settingsSection;
     private LinearLayout bottomNavigation;
-    private final Button[] navigationButtons = new Button[4];
+    private final Button[] navigationButtons = new Button[5];
     private Button serverToggleButton;
     private TextView homeWhatsAppStatus;
     private TextView buildInfoStatus;
@@ -118,10 +119,12 @@ public class MainActivity extends Activity {
         whatsappSection = createSection();
         automationSection = createSection();
         aiSection = createSection();
+        settingsSection = createSection();
         page.addView(homeSection, new LinearLayout.LayoutParams(-1, -2));
         page.addView(whatsappSection, new LinearLayout.LayoutParams(-1, -2));
         page.addView(automationSection, new LinearLayout.LayoutParams(-1, -2));
         page.addView(aiSection, new LinearLayout.LayoutParams(-1, -2));
+        page.addView(settingsSection, new LinearLayout.LayoutParams(-1, -2));
         activeSection = homeSection;
 
         bottomNavigation = createBottomNavigation();
@@ -217,6 +220,18 @@ public class MainActivity extends Activity {
         addText(infoCard, "Server Node.js, mesin WhatsApp, dan dependensinya disertakan dalam APK. SKYWA menyiapkan runtime di penyimpanan privat aplikasi dan mengelolanya lewat layanan latar depan Android. Tidak perlu browser, Termux, atau menjalankan perintah secara manual.", 13, MUTED, false);
         addText(infoCard, "Endpoint internal: 127.0.0.1:3000 • hanya untuk komunikasi aplikasi lokal.", 12, MUTED, false);
 
+        activeSection = settingsSection;
+        addText(activeSection, "PENGATURAN", 27, WHITE, true);
+        addText(activeSection, "Kelola preferensi, keamanan, dan konfigurasi lanjutan SKYWA.", 13, MUTED, false);
+        LinearLayout preferencesCard = addCard("PRIVASI & KEAMANAN");
+        addText(preferencesCard, "API lokal hanya menerima request dengan token per-instalasi yang disimpan di penyimpanan privat aplikasi. Jangan membagikan log diagnostik yang berisi informasi akun atau sesi.", 13, MUTED, false);
+        addText(preferencesCard, "Jika AI diaktifkan, isi pesan WhatsApp dan konteks percakapan dapat dikirim ke provider AI yang dipilih. Gunakan AI hanya untuk chat yang sesuai dan periksa kebijakan privasi provider.", 13, MUTED, false);
+        addButton(preferencesCard, "BUKA PENGATURAN AI", ACCENT, () -> startActivity(new Intent(this, AISettingsActivity.class)));
+        LinearLayout setupCard = addCard("BANTUAN & SETUP");
+        addText(setupCard, "Atur langkah awal: nyalakan server, hubungkan WhatsApp, kirim pesan uji, siapkan satu aturan balasan, lalu konfigurasikan AI jika diperlukan.", 13, MUTED, false);
+        addButton(setupCard, "BUKA PANDUAN SETUP", GREEN, this::showSetupGuide);
+        addText(setupCard, "Aplikasi menargetkan perangkat Android ARM64. Pairing, pengiriman pesan nyata, serta kestabilan background tetap perlu diuji di perangkat yang digunakan.", 12, MUTED, false);
+
         actionStatus = addText(appRoot, "Menyiapkan SKYWA…", 12, MUTED, false);
         actionStatus.setPadding(dp(12), dp(9), dp(12), dp(9));
         actionStatus.setBackground(rounded(PANEL, BORDER, 12));
@@ -255,8 +270,8 @@ public class MainActivity extends Activity {
         bar.setPadding(dp(8), dp(6), dp(8), dp(8));
         bar.setGravity(Gravity.CENTER);
         bar.setBackground(rounded(PANEL, BORDER, 18));
-        String[] labels = {"⌂\nBeranda", "◉\nWhatsApp", "↻\nOtomasi", "✦\nAI"};
-        String[] keys = {"home", "whatsapp", "automation", "ai"};
+        String[] labels = {"⌂\nBeranda", "◉\nWhatsApp", "↻\nOtomasi", "✦\nAI", "⚙\nPengaturan"};
+        String[] keys = {"home", "whatsapp", "automation", "ai", "settings"};
         for (int i = 0; i < labels.length; i++) {
             final String key = keys[i];
             Button button = new Button(this);
@@ -281,7 +296,8 @@ public class MainActivity extends Activity {
         if (whatsappSection != null) whatsappSection.setVisibility("whatsapp".equals(tab) ? View.VISIBLE : View.GONE);
         if (automationSection != null) automationSection.setVisibility("automation".equals(tab) ? View.VISIBLE : View.GONE);
         if (aiSection != null) aiSection.setVisibility("ai".equals(tab) ? View.VISIBLE : View.GONE);
-        int active = "home".equals(tab) ? 0 : "whatsapp".equals(tab) ? 1 : "automation".equals(tab) ? 2 : 3;
+        if (settingsSection != null) settingsSection.setVisibility("settings".equals(tab) ? View.VISIBLE : View.GONE);
+        int active = "home".equals(tab) ? 0 : "whatsapp".equals(tab) ? 1 : "automation".equals(tab) ? 2 : "ai".equals(tab) ? 3 : 4;
         for (int i = 0; i < navigationButtons.length; i++) {
             Button button = navigationButtons[i];
             if (button == null) continue;
@@ -295,8 +311,9 @@ public class MainActivity extends Activity {
         final String[] steps = {
             "1. Nyalakan Server",
             "2. Hubungkan WhatsApp",
-            "3. Pasang balasan otomatis",
-            "4. Atur AI (opsional)"
+            "3. Kirim pesan uji",
+            "4. Aktifkan satu aturan auto-reply",
+            "5. Konfigurasi AI (opsional)"
         };
         new AlertDialog.Builder(this)
             .setTitle("Panduan cepat SKYWA")
@@ -312,9 +329,19 @@ public class MainActivity extends Activity {
                     }
                 } else if (which == 1) {
                     showTab("whatsapp");
-                    actionStatus.setText("Masukkan nomor WhatsApp lalu tekan Minta Kode Pairing.");
+                    actionStatus.setText("Masukkan nomor WhatsApp dalam format internasional lalu tekan Minta Kode Pairing.");
                     actionStatus.setTextColor(MUTED);
                 } else if (which == 2) {
+                    showTab("whatsapp");
+                    if (recipientInput != null && recipientInput.getText().toString().trim().isEmpty() && phoneInput != null) {
+                        recipientInput.setText(phoneInput.getText().toString().trim());
+                    }
+                    if (messageInput != null && messageInput.getText().toString().trim().isEmpty()) {
+                        messageInput.setText("Tes pesan SKYWA. Mohon abaikan.");
+                    }
+                    actionStatus.setText("Pastikan WhatsApp sudah terhubung. Periksa nomor tujuan dan teks di kartu Kirim Pesan, lalu tekan Kirim Pesan untuk menguji pengiriman nyata.");
+                    actionStatus.setTextColor(MUTED);
+                } else if (which == 3) {
                     showTab("automation");
                     applyStarterPreset();
                 } else {
