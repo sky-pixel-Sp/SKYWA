@@ -28,11 +28,10 @@ app.use(express.json({limit:'1mb'}));
 
 app.get('/api/health', (_req, res) => {
   const h = controller.getHealth();
-  res.json({
+  return res.json({
     status: h.controller === 'running' ? 'healthy' : h.controller === 'failed' ? 'degraded' : 'starting',
-    version: process.version, uptime: Math.round(process.uptime()), server:'SKYWA WhatsApp Bot Studio',
-    port:PORT, bind:BIND, database:initDB() ? 'connected' : 'disconnected',
-    controller:h.controller, whatsapp:h.whatsapp, mode:'standalone-android'
+    service: 'SKYWA',
+    mode: 'standalone-android'
   });
 });
 

@@ -74,7 +74,18 @@ describe('SKYWA local API security and endpoint behavior', () => {
     assert.equal((await fetch(server.base + '/api/health')).status, 200, 'health is intentionally public');
     assert.equal((await fetch(server.base + '/api/whatsapp/status')).status, 401, 'status and QR data must be protected');
     assert.equal((await fetch(server.base + '/api/whatsapp/status', {headers:{'X-Skywa-Token':'wrong-token'}})).status, 401);
+    assert.equal((await fetch(server.base + '/api/ai/config')).status, 401, 'AI configuration must be protected too');
     const headers = {'X-Skywa-Token':TOKEN, 'Content-Type':'application/json'};
+
+    fs.writeFileSync(path.join(server.cwd, 'skywa-app-version.txt'), '1.7.0');
+    fs.writeFileSync(path.join(server.cwd, 'skywa-app-version-code.txt'), '8');
+    fs.writeFileSync(path.join(server.cwd, 'skywa-bundle-version.txt'), 'test-commit-sha');
+    const buildResponse = await fetch(server.base + '/api/build', {headers});
+    assert.equal(buildResponse.status, 200);
+    const buildInfo = await json(buildResponse);
+    assert.equal(buildInfo.appVersion, '1.7.0');
+    assert.equal(buildInfo.appVersionCode, 8);
+    assert.equal(buildInfo.bundleVersion, 'test-commit-sha');
 
     const invalidJson = await fetch(server.base + '/api/ai/config', {method:'POST',headers,body:'{"enabled":'});
     assert.equal(invalidJson.status, 400, 'malformed JSON should not become HTTP 500');
