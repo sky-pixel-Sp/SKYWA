@@ -331,19 +331,41 @@ public class MainActivity extends Activity {
     }
 
     private void applyStarterPreset() {
-        if (autoReplyEnabled != null) autoReplyEnabled.setChecked(true);
-        if (triggerInput != null) triggerInput.setText("halo");
-        if (replyInput != null) replyInput.setText("Halo! Terima kasih sudah menghubungi kami. Ada yang bisa kami bantu?");
-        if (automationRulesEnabled != null) automationRulesEnabled.setChecked(true);
-        if (automationIgnoreGroups != null) automationIgnoreGroups.setChecked(true);
-        if (automationCooldownInput != null && automationCooldownInput.getText().toString().trim().isEmpty()) automationCooldownInput.setText("10");
-        if (automationMaxRepliesInput != null && automationMaxRepliesInput.getText().toString().trim().isEmpty()) automationMaxRepliesInput.setText("10");
-        if (automationRulesInput != null && automationRulesInput.getText().toString().trim().isEmpty()) {
-            automationRulesInput.setText("contains: halo => Halo! Terima kasih sudah menghubungi kami.\ncontains: harga => Produk apa yang ingin kamu tanyakan?\ncontains: jam buka => Silakan tanyakan cabang atau jadwal yang kamu butuhkan.");
-        }
-        showTab("automation");
-        actionStatus.setText("Contoh siap pakai sudah diisi. Periksa dan tekan Simpan sebelum digunakan.");
-        actionStatus.setTextColor(GREEN);
+        final String[] presets = {
+            "Toko online",
+            "Customer service",
+            "Balasan personal"
+        };
+        new AlertDialog.Builder(this)
+            .setTitle("Pilih paket otomasi")
+            .setMessage("Pilih contoh sesuai kebutuhan. Semua aturan bisa kamu ubah sebelum disimpan.")
+            .setItems(presets, (dialog, which) -> {
+                String trigger = "halo";
+                String reply = "Halo! Terima kasih sudah menghubungi kami. Ada yang bisa kami bantu?";
+                String rules;
+                if (which == 0) {
+                    rules = "contains: halo => Halo! Selamat datang di toko kami.\ncontains: harga => Produk mana yang ingin kamu cek harganya?\ncontains: stok => Sebutkan nama produk agar kami bisa cek stok.\ncontains: order => Kirim nomor pesanan agar kami bantu cek.";
+                } else if (which == 1) {
+                    rules = "contains: halo => Halo! Tim bantuan siap membantu.\ncontains: bantuan => Ceritakan kendala yang kamu alami.\ncontains: komplain => Maaf atas kendalanya. Kirim detail masalah agar kami bisa bantu.\ncontains: terima kasih => Sama-sama! Senang bisa membantu.";
+                    reply = "Halo! Terima kasih sudah menghubungi layanan bantuan. Ada yang bisa kami bantu?";
+                } else {
+                    rules = "contains: halo => Halo! Aku sedang tidak selalu online, tapi pesanmu sudah diterima.\ncontains: sibuk => Maaf, aku sedang sibuk. Nanti aku balas ya.\ncontains: terima kasih => Sama-sama!";
+                    reply = "Halo! Pesanmu sudah diterima. Aku akan membalas saat tersedia.";
+                }
+                if (autoReplyEnabled != null) autoReplyEnabled.setChecked(true);
+                if (triggerInput != null) triggerInput.setText(trigger);
+                if (replyInput != null) replyInput.setText(reply);
+                if (automationRulesEnabled != null) automationRulesEnabled.setChecked(true);
+                if (automationIgnoreGroups != null) automationIgnoreGroups.setChecked(true);
+                if (automationCooldownInput != null) automationCooldownInput.setText("10");
+                if (automationMaxRepliesInput != null) automationMaxRepliesInput.setText("10");
+                if (automationRulesInput != null) automationRulesInput.setText(rules);
+                showTab("automation");
+                actionStatus.setText("Paket " + presets[which] + " diisi. Periksa aturan, lalu tekan Simpan Automation Pro dan Simpan Auto-reply.");
+                actionStatus.setTextColor(GREEN);
+            })
+            .setNegativeButton("BATAL", (dialog, which) -> dialog.dismiss())
+            .show();
     }
 
     private void toggleEmbeddedServer() {
