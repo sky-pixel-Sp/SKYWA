@@ -38,14 +38,24 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/build', async (_req, res) => {
   let bundleVersion = 'unknown';
+  let appVersion = 'unknown';
+  let appVersionCode = null;
   try {
     bundleVersion = (await readFile(path.resolve(process.cwd(), '.skywa-bundle-version'), 'utf8')).trim() || 'unknown';
   } catch (_) {
-    // Older source bundles do not carry a fingerprint file.
+    // A source checkout may not have a staged runtime fingerprint.
   }
-  res.json({
+  try {
+    appVersion = (await readFile(path.resolve(process.cwd(), '.skywa-app-version'), 'utf8')).trim() || 'unknown';
+    const codeText = (await readFile(path.resolve(process.cwd(), '.skywa-app-version-code'), 'utf8')).trim();
+    appVersionCode = /^\d+$/.test(codeText) ? Number(codeText) : null;
+  } catch (_) {
+    // A source checkout may not have Android build metadata staged.
+  }
+  return res.json({
     status: 'ok',
-    appVersion: '1.5.0',
+    appVersion,
+    appVersionCode,
     bundleVersion,
     nodeVersion: process.version,
     uptime: Math.round(process.uptime()),
