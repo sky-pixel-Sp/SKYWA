@@ -15,7 +15,8 @@ Java_com_skywa_runtime_NodeRuntime_startNodeWithArguments(
         jobjectArray arguments,
         jstring workingDirectory,
         jstring temporaryDirectory,
-        jstring compileCacheDirectory) {
+        jstring compileCacheDirectory,
+        jstring apiToken) {
     if (arguments == nullptr || workingDirectory == nullptr) {
         return static_cast<jint>(-EINVAL);
     }
@@ -52,6 +53,14 @@ Java_com_skywa_runtime_NodeRuntime_startNodeWithArguments(
 
     setenv("NODE_COMPILE_CACHE_PORTABLE", "1", 1);
     setenv("UV_THREADPOOL_SIZE", "4", 0);
+
+    if (apiToken == nullptr) return static_cast<jint>(-EINVAL);
+    const char *tokenValue = env->GetStringUTFChars(apiToken, nullptr);
+    if (tokenValue == nullptr) return static_cast<jint>(-ENOMEM);
+    const int tokenSetResult = setenv("SKYWA_API_TOKEN", tokenValue, 1);
+    const int tokenSetError = errno;
+    env->ReleaseStringUTFChars(apiToken, tokenValue);
+    if (tokenSetResult != 0) return static_cast<jint>(-tokenSetError);
 
     const jsize argumentCount = env->GetArrayLength(arguments);
     if (argumentCount <= 0) {

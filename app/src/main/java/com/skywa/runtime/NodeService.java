@@ -79,11 +79,13 @@ public final class NodeService extends Service {
 
             String entryPoint = new File(runtimeRoot, "apps/server/src/runner/server.js").getAbsolutePath();
             Log.i(TAG, "Starting embedded Node.js from app-private storage");
+            String apiToken = ApiTokenStore.getOrCreate(this);
             int result = NodeRuntime.startNodeWithArguments(
                     new String[]{"node", "--max-old-space-size-percentage=15", entryPoint},
                     runtimeRoot.getAbsolutePath(),
                     tempRoot.getAbsolutePath(),
-                    compileCache.getAbsolutePath());
+                    compileCache.getAbsolutePath(),
+                    apiToken);
             runtimeStartedInProcess = false;
             Log.e(TAG, "Embedded Node.js exited with code " + result);
             updateNotification("Runtime berhenti (kode " + result + ") • buka ulang SKYWA");

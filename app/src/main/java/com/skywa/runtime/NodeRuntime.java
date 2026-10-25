@@ -15,5 +15,6 @@ public final class NodeRuntime {
             String[] arguments,
             String workingDirectory,
             String temporaryDirectory,
-            String compileCacheDirectory);
+            String compileCacheDirectory,
+            String apiToken);
 }
