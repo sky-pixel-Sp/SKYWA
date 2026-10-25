@@ -34,11 +34,24 @@ All live WhatsApp capabilities require internet connectivity and must be verifie
 
 The GitHub Actions workflow prepares the embedded runtime and then builds/verifies the debug APK:
 
-**Download standalone APK (ARM64):** https://github.com/sky-pixel-Sp/SKYWA/releases/download/skywa-build-33/SKYWA-debug.apk
+**Download latest standalone APK (ARM64):** https://raw.githubusercontent.com/sky-pixel-Sp/SKYWA/apk-downloads/SKYWA-standalone-arm64.apk
+
+Open the [APK download branch](https://github.com/sky-pixel-Sp/SKYWA/tree/apk-downloads) if you prefer to download it from the repository UI. The workflow updates this APK after a successful build from the standalone or `fix/**` branch.
 
 This is a GitHub prerelease build. The APK is distributed as a release asset rather than committed to the source branch.
 
 Build and verification logs: https://github.com/sky-pixel-Sp/SKYWA/actions
+
+## Install on Android
+
+1. Open the **Download latest standalone APK** link above on the Android phone and download `SKYWA-standalone-arm64.apk`.
+2. Open the downloaded file from Downloads. If Android asks, allow your browser or file manager to **Install unknown apps**, then return and tap **Install**.
+3. If an older SKYWA debug build is installed and Android reports a signature conflict, uninstall the older build first and install the new one. **Uninstalling erases that installation's local settings and WhatsApp session**, so only do this if you can pair again.
+4. Open SKYWA and wait for the foreground service notification/runtime startup to settle. Keep internet access enabled for WhatsApp and OpenRouter.
+5. To configure AI, open **Pengaturan AI**. For OpenRouter, choose the provider, enter the API key and model ID, save, and run the test prompt. For a local provider, the endpoint and model server must already be reachable from the phone; the APK does not include model weights.
+6. Link WhatsApp using the pairing-code flow in the app, then test with a separate chat before enabling automatic replies for normal use.
+
+**Device requirement:** this build targets ARM64 Android devices. CI verifies source tests, APK compilation, and package contents; it does not replace a real-device test of launch, WhatsApp pairing, message sending, and background behavior.
 
 For a Linux build machine with JDK 17, Android SDK/NDK, CMake, Node.js 24+, npm, `curl`, and `unzip`:
 
