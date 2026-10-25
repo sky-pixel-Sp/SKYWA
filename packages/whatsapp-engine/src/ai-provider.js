@@ -19,17 +19,17 @@ export function normalizeAIConfig(input = {}) {
   if (provider === 'local' && (!parsed || !['http:','https:'].includes(parsed.protocol))) throw new TypeError('Endpoint lokal harus berupa URL HTTP atau HTTPS yang valid');
   return {enabled:input.enabled===true,provider,apiKey,model,baseUrl,systemPrompt,maxTokens,temperature};
 }
-export function buildAIRequest(config,userText) {
+export function buildAIRequest(config,userText,history=[]) {
   const normalized=normalizeAIConfig({...config,enabled:false,apiKey:config.apiKey||'local'});
   const baseUrl=normalized.provider==='openrouter'?'https://openrouter.ai/api/v1':normalized.baseUrl;
   return {url:baseUrl.endsWith('/chat/completions')?baseUrl:baseUrl+'/chat/completions',
     headers:{'Content-Type':'application/json',...(normalized.provider==='openrouter'?{Authorization:'Bearer '+config.apiKey,'HTTP-Referer':'https://github.com/sky-pixel-Sp/SKYWA','X-Title':'SKYWA WhatsApp Bot Studio'}:config.apiKey?{Authorization:'Bearer '+config.apiKey}:{})},
-    body:{model:normalized.model,messages:[{role:'system',content:normalized.systemPrompt},{role:'user',content:String(userText).slice(0,6000)}],max_tokens:normalized.maxTokens,temperature:normalized.temperature}};
+    body:{model:normalized.model,messages:[{role:'system',content:normalized.systemPrompt},...(Array.isArray(history)?history.slice(-12).filter(m=>m&&['user','assistant'].includes(m.role)&&typeof m.content==='string').map(m=>({role:m.role,content:m.content.slice(0,3000)})):[]),{role:'user',content:String(userText).slice(0,6000)}],max_tokens:normalized.maxTokens,temperature:normalized.temperature}};
 }
 export async function generateAIReply(config,userText,options={}) {
   if(!config||config.enabled!==true)throw new Error('AI auto-reply belum diaktifkan');
   if(typeof userText!=='string'||!userText.trim())throw new TypeError('Pesan pengguna kosong');
-  const request=buildAIRequest(config,userText.trim()); const fetcher=options.fetch||globalThis.fetch;
+  const request=buildAIRequest(config,userText.trim(),options.history||[]); const fetcher=options.fetch||globalThis.fetch;
   if(typeof fetcher!=='function')throw new Error('HTTP fetch tidak tersedia pada runtime ini');
   const response=await fetcher(request.url,{method:'POST',headers:request.headers,body:JSON.stringify(request.body),signal:AbortSignal.timeout(25000)});
   const raw=await response.text(); let data; try{data=raw?JSON.parse(raw):{};}catch{data={};}
