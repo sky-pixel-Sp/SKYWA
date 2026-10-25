@@ -232,9 +232,11 @@ public class MainActivity extends Activity {
             }
         });
         card.setTag(expanded);
-        for (int i = 1; i < card.getChildCount(); i++) {
-            card.getChildAt(i).setVisibility(expanded ? View.VISIBLE : View.GONE);
-        }
+        card.post(() -> {
+            for (int i = 1; i < card.getChildCount(); i++) {
+                card.getChildAt(i).setVisibility(expanded ? View.VISIBLE : View.GONE);
+            }
+        });
         return card;
     }
 

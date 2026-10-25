@@ -108,7 +108,7 @@ rm -rf \
 # Stamp the source revision into the installed bundle. Runtime assets are cached
 # in app-private storage, so versionCode alone is not enough after hotfix builds.
 BUNDLE_VERSION="$(git rev-parse HEAD)"
-printf '%s\\n' "$BUNDLE_VERSION" > "$APP_ASSETS/.skywa-bundle-version"
+printf '%s\n' "$BUNDLE_VERSION" > "$APP_ASSETS/.skywa-bundle-version"
 
 echo "Embedded Node.js runtime: ${RUNTIME_VERSION} (SHA-256 verified)"
 echo "Runtime library: ${APP_LIBNODE}/bin/arm64-v8a/libnode.so"
