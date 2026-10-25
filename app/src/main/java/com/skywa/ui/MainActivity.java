@@ -153,7 +153,6 @@ public class MainActivity extends Activity {
         buildInfoStatus = addText(statusCard, "Versi runtime: memeriksa…", 11, MUTED, false);
         homeWhatsAppStatus = addText(activeSection, "WhatsApp • memeriksa status…", 14, WHITE, true);
 
-        actionStatus = addText(activeSection, "Menyiapkan SKYWA…", 13, MUTED, false);
         addText(activeSection, "Urutan mudah: 1) Nyalakan server  2) Hubungkan WhatsApp  3) Atur AI atau balasan.", 12, MUTED, false);
 
         activeSection = whatsappSection;
@@ -219,6 +218,12 @@ exact: harga => Silakan sebut produk.\\nstartsWith: order => Kirim nomor pesanan
         LinearLayout infoCard = addCard("TENTANG RUNTIME");
         addText(infoCard, "Server Node.js, mesin WhatsApp, dan dependensinya disertakan dalam APK. SKYWA menyiapkan runtime di penyimpanan privat aplikasi dan mengelolanya lewat layanan latar depan Android. Tidak perlu browser, Termux, atau menjalankan perintah secara manual.", 13, MUTED, false);
         addText(infoCard, "Endpoint internal: 127.0.0.1:3000 • hanya untuk komunikasi aplikasi lokal.", 12, MUTED, false);
+
+        actionStatus = addText(appRoot, "Menyiapkan SKYWA…", 12, MUTED, false);
+        actionStatus.setPadding(dp(12), dp(9), dp(12), dp(9));
+        actionStatus.setBackground(rounded(PANEL, BORDER, 12));
+        appRoot.removeView(actionStatus);
+        appRoot.addView(actionStatus, 1, new LinearLayout.LayoutParams(-1, -2));
 
         showTab("home");
         updateServerButton();
