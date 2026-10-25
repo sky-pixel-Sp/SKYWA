@@ -53,8 +53,8 @@ for ABI in arm64-v8a armeabi-v7a x86_64; do
       echo "ERROR: required arm64-v8a/libnode.so is missing from the runtime." >&2
       exit 1
     fi
-    echo "Runtime does not include ${ABI}; skipping it."
-    continue
+    echo "ERROR: runtime does not include required ABI ${ABI}." >&2
+    exit 1
   fi
 
   mkdir -p "$APP_LIBNODE/bin/${ABI}"
@@ -68,6 +68,11 @@ rm -rf "$APP_ASSETS"
 mkdir -p "$APP_ASSETS/apps" "$APP_ASSETS/packages"
 cp -R apps/server "$APP_ASSETS/apps/server"
 cp -R packages/whatsapp-engine "$APP_ASSETS/packages/whatsapp-engine"
+# CI installs workspace dependencies before this script runs. Do not copy
+# those host-side node_modules folders into the APK; the root install below
+# creates one clean production-only dependency tree for the Android runtime.
+rm -rf "$APP_ASSETS/apps/server/node_modules" "$APP_ASSETS/packages/whatsapp-engine/node_modules"
+rm -f "$APP_ASSETS/apps/server/package-lock.json" "$APP_ASSETS/packages/whatsapp-engine/package-lock.json"
 
 node --input-type=commonjs - "$APP_ASSETS" <<'NODE'
 const fs = require('node:fs');
