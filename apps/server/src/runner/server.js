@@ -22,6 +22,23 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+app.get('/api/build', async (_req, res) => {
+  let bundleVersion = 'unknown';
+  try {
+    bundleVersion = (await readFile(path.resolve(process.cwd(), '.skywa-bundle-version'), 'utf8')).trim() || 'unknown';
+  } catch (_) {
+    // Older source bundles do not carry a fingerprint file.
+  }
+  res.json({
+    status: 'ok',
+    appVersion: '1.4.1',
+    bundleVersion,
+    nodeVersion: process.version,
+    uptime: Math.round(process.uptime()),
+    mode: 'standalone-android'
+  });
+});
+
 app.get('/api/system/status', (_req, res) => {
   const h = controller.getHealth();
   res.json({

@@ -79,3 +79,10 @@ The preparation script is necessary because the large native runtime and `node_m
 - The local API remains bound to `127.0.0.1` and is not intentionally exposed publicly.
 - A foreground service and partial wake lock are used to improve continuity while the bot is running. This can increase battery use; Android OEM battery-management and force-stop behavior can still stop background activity.
 - Do not claim standalone operation or successful live WhatsApp tests until the APK and physical-device tests have actually passed.
+
+
+## Runtime bundle hotfix (v1.4.1)
+
+Each Android build now stamps the source revision into the embedded Node.js bundle. On startup, SKYWA compares that fingerprint with the cached private runtime files and refreshes code when they differ, while preserving the `data` directory containing WhatsApp session and settings. This prevents source hotfixes from leaving an older API server in app-private storage even when app code versions had not been bumped.
+
+The native UI also turns non-JSON/HTML 404 responses into a short recovery message instead of printing the server's HTML document. Several lower-priority settings cards can be collapsed to make the main screen shorter on phones.

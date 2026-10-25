@@ -123,13 +123,13 @@ public class MainActivity extends Activity {
         addText(connectCard, "Di WhatsApp, buka Perangkat tertaut → Tautkan perangkat → Tautkan dengan nomor telepon, lalu masukkan kode yang tampil.", 12, MUTED, false);
         addButton(connectCard, "HENTIKAN KONEKSI (SESI TETAP DISIMPAN)", 0xFF34425C, this::stopWhatsApp);
 
-        LinearLayout sendCard = addCard("2. KIRIM PESAN");
+        LinearLayout sendCard = addCollapsibleCard("2. KIRIM PESAN", false);
         recipientInput = addInput(sendCard, "Nomor tujuan (contoh 62812…)", false);
         recipientInput.setInputType(3);
         messageInput = addInput(sendCard, "Tulis pesan yang akan dikirim", true);
         addButton(sendCard, "KIRIM PESAN", GREEN, this::sendMessage);
 
-        LinearLayout botCard = addCard("3. AUTO-REPLY SEDERHANA");
+        LinearLayout botCard = addCollapsibleCard("3. AUTO-REPLY SEDERHANA", false);
         addText(botCard, "Aktifkan balasan otomatis untuk pesan masuk. Kata kunci kosong berarti semua pesan teks akan dibalas; gunakan dengan hati-hati.", 13, MUTED, false);
         autoReplyEnabled = new CheckBox(this);
         autoReplyEnabled.setText("Aktifkan auto-reply");
@@ -142,7 +142,7 @@ public class MainActivity extends Activity {
         replyInput = addInput(botCard, "Balasan otomatis", true);
         addButton(botCard, "SIMPAN ATURAN AUTO-REPLY", ACCENT, this::saveAutoReply);
 
-        LinearLayout automationCard = addCard("4. AUTOMATION PRO • MULTI-RULE");
+        LinearLayout automationCard = addCollapsibleCard("4. AUTOMATION PRO • MULTI-RULE", false);
         addText(automationCard, "Buat banyak aturan balasan, batasi frekuensi, atur jam aktif, abaikan grup, dan whitelist/blacklist nomor. Format aturan per baris: contains: harga, produk => Balasan untuk harga/produk. Mode tersedia: contains, exact, startsWith.", 13, MUTED, false);
         automationRulesEnabled = addCheckBox(automationCard, "Aktifkan multi-rule automation");
         automationIgnoreGroups = addCheckBox(automationCard, "Abaikan pesan dari grup (disarankan)");
@@ -155,14 +155,14 @@ public class MainActivity extends Activity {
         automationEndInput = addInput(automationCard, "Jam selesai format 24 jam, contoh 21:00", false);
         automationAllowlistInput = addInput(automationCard, "Whitelist nomor/JID (opsional, pisahkan koma/baris baru)", true);
         automationBlocklistInput = addInput(automationCard, "Blacklist nomor/JID (opsional, pisahkan koma/baris baru)", true);
-        automationRulesInput = addInput(automationCard, "Aturan per baris: contains: halo => Halo!\\nexact: harga => Silakan sebut produk.\\nstartsWith: order => Kirim nomor pesanan.", true);
+        automationRulesInput = addInput(automationCard, "Aturan per baris: contains: halo => Halo!\nexact: harga => Silakan sebut produk.\\nstartsWith: order => Kirim nomor pesanan.", true);
         addButton(automationCard, "SIMPAN AUTOMATION PRO", ACCENT, this::saveAutomation);
         automationStats = addText(automationCard, "Statistik otomatisasi: memuat…", 12, MUTED, false);
         addButton(automationCard, "JEDA SEMUA BALASAN OTOMATIS", 0xFF34425C, this::pauseAutomation);
         addButton(automationCard, "LANJUTKAN BALASAN OTOMATIS", GREEN, this::resumeAutomation);
         addButton(automationCard, "RESET STATISTIK AUTOMATION", 0xFF34425C, this::resetAutomationStats);
 
-        LinearLayout infoCard = addCard("RUNTIME ANDROID TERTANAM");
+        LinearLayout infoCard = addCollapsibleCard("RUNTIME ANDROID TERTANAM", false);
         addText(infoCard, "Server Node.js, mesin WhatsApp, dan dependensinya disertakan dalam APK. SKYWA menyiapkan runtime di penyimpanan privat aplikasi dan mengelolanya lewat layanan latar depan Android. Tidak perlu browser, Termux, atau menjalankan perintah secara manual.", 13, MUTED, false);
         addText(infoCard, "Endpoint internal: 127.0.0.1:3000 • hanya untuk komunikasi aplikasi lokal.", 12, MUTED, false);
 
@@ -211,6 +211,30 @@ public class MainActivity extends Activity {
         TextView heading = addText(card, title, 15, WHITE, true);
         heading.setLetterSpacing(0.025f);
         heading.setPadding(0, 0, 0, dp(5));
+        return card;
+    }
+
+    private LinearLayout addCollapsibleCard(String title, boolean expanded) {
+        LinearLayout card = addCard(title);
+        TextView heading = (TextView) card.getChildAt(0);
+        heading.setText(title + (expanded ? "   ▾" : "   ▸"));
+        heading.setPadding(0, dp(2), 0, dp(10));
+        heading.setMinHeight(dp(32));
+        heading.setGravity(Gravity.CENTER_VERTICAL);
+        heading.setFocusable(true);
+        heading.setClickable(true);
+        heading.setOnClickListener(view -> {
+            boolean nextExpanded = Boolean.TRUE.equals(card.getTag()) ? false : true;
+            card.setTag(nextExpanded);
+            heading.setText(title + (nextExpanded ? "   ▾" : "   ▸"));
+            for (int i = 1; i < card.getChildCount(); i++) {
+                card.getChildAt(i).setVisibility(nextExpanded ? View.VISIBLE : View.GONE);
+            }
+        });
+        card.setTag(expanded);
+        for (int i = 1; i < card.getChildCount(); i++) {
+            card.getChildAt(i).setVisibility(expanded ? View.VISIBLE : View.GONE);
+        }
         return card;
     }
 
@@ -647,17 +671,28 @@ public class MainActivity extends Activity {
             int status = connection.getResponseCode();
             InputStream stream = status >= 200 && status < 400 ? connection.getInputStream() : connection.getErrorStream();
             String raw = stream == null ? "" : readString(stream);
-            JSONObject parsed;
-            try {
-                parsed = raw.isEmpty() ? new JSONObject() : new JSONObject(raw);
-            } catch (JSONException ignored) {
-                parsed = new JSONObject();
-                parsed.put("raw", raw);
-            }
             if (status < 200 || status >= 300) {
-                throw new IOException("HTTP " + status + ": " + parsed.optString("error", raw));
+                String detail = "";
+                try {
+                    JSONObject errorJson = new JSONObject(raw);
+                    detail = errorJson.optString("error", errorJson.optString("message", ""));
+                } catch (JSONException ignored) {
+                    // Express 404 pages are HTML, not machine-readable API errors.
+                }
+                if (detail.isEmpty()) {
+                    if (status == 404 || raw.toLowerCase(java.util.Locale.ROOT).contains("<!doctype html")) {
+                        detail = "API runtime tidak cocok atau masih memakai bundle lama. Pasang APK terbaru, lalu Paksa berhenti SKYWA dan buka kembali agar bundle diperbarui.";
+                    } else {
+                        detail = "Server lokal mengembalikan HTTP " + status + ".";
+                    }
+                }
+                throw new IOException("HTTP " + status + ": " + detail);
             }
-            return parsed;
+            try {
+                return raw.isEmpty() ? new JSONObject() : new JSONObject(raw);
+            } catch (JSONException parseError) {
+                throw new IOException("Respons runtime bukan JSON. Coba Paksa berhenti SKYWA, buka ulang, lalu refresh status.");
+            }
         } finally {
             if (connection != null) connection.disconnect();
         }

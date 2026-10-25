@@ -17,6 +17,7 @@ import com.skywa.ui.MainActivity;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -98,7 +99,8 @@ public final class NodeService extends Service {
 
     private void prepareRuntimeBundle(File runtimeRoot) throws IOException {
         File versionFile = new File(runtimeRoot, ".skywa-assets-version");
-        String wantedVersion = Integer.toString(BuildConfig.VERSION_CODE);
+        String wantedVersion = readBundledBundleVersion();
+        Log.i(TAG, "Embedded bundle fingerprint: " + wantedVersion);
         File entryPoint = new File(runtimeRoot, "apps/server/src/runner/server.js");
         if (entryPoint.isFile() && versionFile.isFile()
                 && wantedVersion.equals(readText(versionFile).trim())) {
@@ -141,6 +143,22 @@ public final class NodeService extends Service {
         if (!entryPoint.isFile()) {
             throw new IOException("Bundle backend SKYWA tidak ditemukan setelah ekstraksi");
         }
+    }
+
+    private String readBundledBundleVersion() throws IOException {
+        try (InputStream input = getAssets().open("nodejs-project/.skywa-bundle-version");
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[256];
+            int count;
+            while ((count = input.read(buffer)) != -1) {
+                output.write(buffer, 0, count);
+            }
+            String value = output.toString(StandardCharsets.UTF_8.name()).trim();
+            if (!value.isEmpty()) return value;
+        } catch (IOException error) {
+            Log.w(TAG, "Bundle fingerprint missing; use APK version as fallback", error);
+        }
+        return BuildConfig.VERSION_CODE + "-" + BuildConfig.VERSION_NAME;
     }
 
     private void copyAssetTree(String assetPath, File destination) throws IOException {
