@@ -55,7 +55,8 @@ Node's in-process startup API supports only one runtime instance per Android pro
 - The app keeps a partial wake lock while the service is alive to improve connectivity when the screen is off. This consumes additional battery.
 - Android OEM battery management, permission settings, and force-stop behavior can still stop background activity; no application can promise uninterrupted runtime under force-stop.
 - Foreground-service special-use behavior and notification visibility must be checked on supported Android versions. A Google Play release would also need the appropriate foreground-service declarations/review.
-- The current build targets a universal APK for `arm64-v8a`, `armeabi-v7a`, and `x86_64` when those libraries are present in the pinned runtime.
+- The current optimized debug APK targets `arm64-v8a` only. This is intended for modern 64-bit ARM Android phones; 32-bit-only devices and x86 emulators need a separate build.
+- The current SKYWA UI/engine paths focus on text sending and text auto-reply. Linux x64 `sharp` and libvips binaries are removed from the Android bundle; Baileys dynamically imports image adapters only when media operations are invoked.
 
 ## Validation status — not a release certification
 
