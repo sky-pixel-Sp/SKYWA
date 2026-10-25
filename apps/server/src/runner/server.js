@@ -4,7 +4,8 @@ import path from 'node:path';
 import {createServer} from 'node:http';
 import {initDB, getSetting, saveSetting} from '../database.js';
 import * as controller from '../lib/runtimeController.js';
-import {logoutWhatsApp, sendText, getAutoReplyConfig, setAutoReplyConfig} from '../../../../packages/whatsapp-engine/src/engine.js';
+import {logoutWhatsApp, sendText, getAutoReplyConfig, setAutoReplyConfig, getAIConfig, setAIConfig, getAutomationConfig, setAutomationConfig, getAutomationStats, resetAutomationStats} from '../../../../packages/whatsapp-engine/src/engine.js';
+import {normalizeAIConfig, generateAIReply} from '../../../../packages/whatsapp-engine/src/ai-provider.js';
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -18,6 +19,23 @@ app.get('/api/health', (_req, res) => {
     version: process.version, uptime: Math.round(process.uptime()), server:'SKYWA WhatsApp Bot Studio',
     port:PORT, bind:BIND, database:initDB() ? 'connected' : 'disconnected',
     controller:h.controller, whatsapp:h.whatsapp, mode:'standalone-android'
+  });
+});
+
+app.get('/api/build', async (_req, res) => {
+  let bundleVersion = 'unknown';
+  try {
+    bundleVersion = (await readFile(path.resolve(process.cwd(), '.skywa-bundle-version'), 'utf8')).trim() || 'unknown';
+  } catch (_) {
+    // Older source bundles do not carry a fingerprint file.
+  }
+  res.json({
+    status: 'ok',
+    appVersion: '1.5.0',
+    bundleVersion,
+    nodeVersion: process.version,
+    uptime: Math.round(process.uptime()),
+    mode: 'standalone-android'
   });
 });
 
@@ -49,6 +67,28 @@ app.post('/api/whatsapp/logout', async (_req, res) => {
 });
 
 app.get('/api/bot/config', (_req, res) => res.json(getAutoReplyConfig()));
+app.get('/api/automation/config', (_req, res) => res.json(getAutomationConfig()));
+app.post('/api/automation/config', (req, res) => {
+  try {
+    const config = setAutomationConfig(req.body || {});
+    saveSetting('automationConfig', config);
+    res.json({status:'saved', config});
+  } catch (error) {
+    res.status(400).json({status:'failed', error:error.message || 'Automation config invalid'});
+  }
+});
+app.get('/api/automation/stats', (_req, res) => res.json(getAutomationStats()));
+app.post('/api/automation/stats/reset', (_req, res) => res.json({status:'reset', stats:resetAutomationStats()}));
+app.post('/api/automation/pause', (_req, res) => {
+  const config = setAutomationConfig({...getAutomationConfig(), paused:true});
+  saveSetting('automationConfig', config);
+  res.json({status:'paused', config});
+});
+app.post('/api/automation/resume', (_req, res) => {
+  const config = setAutomationConfig({...getAutomationConfig(), paused:false});
+  saveSetting('automationConfig', config);
+  res.json({status:'resumed', config});
+});
 app.post('/api/bot/config', (req, res) => {
   const body = req.body || {};
   if (body.enabled !== undefined && typeof body.enabled !== 'boolean') return res.status(400).json({error:'enabled must be a boolean'});
@@ -61,6 +101,33 @@ app.post('/api/bot/config', (req, res) => {
   const config = setAutoReplyConfig({enabled:body.enabled === true, trigger, reply});
   saveSetting('botConfig', config);
   res.json({status:'saved', config});
+});
+
+app.get('/api/ai/config', (_req, res) => {
+  const config = getAIConfig();
+  const {apiKey, ...safe} = config;
+  res.json({...safe, hasApiKey:Boolean(apiKey)});
+});
+app.post('/api/ai/config', (req, res) => {
+  try {
+    const body = req.body || {};
+    const current = getAIConfig();
+    const apiKey = typeof body.apiKey === 'string' && body.apiKey.trim() ? body.apiKey.trim() : current.apiKey;
+    const config = normalizeAIConfig({...current, ...body, apiKey, hasApiKey:Boolean(apiKey)});
+    setAIConfig(config);
+    saveSetting('aiConfig', config);
+    const {apiKey:secret, ...safe} = config;
+    res.json({status:'saved', ...safe, hasApiKey:Boolean(secret)});
+  } catch (error) { res.status(400).json({status:'failed', error:error.message || 'AI config invalid'}); }
+});
+app.post('/api/ai/test', async (req, res) => {
+  try {
+    const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim().slice(0, 6000) : '';
+    if (!prompt) return res.status(400).json({error:'Isi pertanyaan untuk tes AI'});
+    const config = getAIConfig();
+    const reply = await generateAIReply({...config, enabled:true}, prompt);
+    res.json({status:'ok', reply, provider:config.provider, model:config.model});
+  } catch (error) { res.status(502).json({status:'failed', error:error.message || 'AI test failed'}); }
 });
 
 app.get('/api/system/diagnostics', (_req, res) => {
@@ -91,6 +158,16 @@ app.use((error, req, res, _next) => {
 });
 
 initDB();
+const storedAIConfig = getSetting('aiConfig');
+if (storedAIConfig) {
+  try { setAIConfig(storedAIConfig); }
+  catch (error) { console.error('[SKYWA] Stored AI config was ignored:', error.message); }
+}
+const storedAutomationConfig = getSetting('automationConfig');
+if (storedAutomationConfig) {
+  try { setAutomationConfig(storedAutomationConfig); }
+  catch (error) { console.error('[SKYWA] Stored automation config was ignored:', error.message); }
+}
 const storedBotConfig = getSetting('botConfig');
 if (storedBotConfig) {
   try { setAutoReplyConfig(storedBotConfig); }

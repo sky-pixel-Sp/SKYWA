@@ -1,7 +1,7 @@
 name: SKYWA CI — tests and Android debug APK
 on:
   push:
-    branches: [main, master, "ci/**", "feat/standalone-android-runtime"]
+    branches: [main, master, "ci/**", "feat/standalone-android-runtime", "fix/**"]
   pull_request:
   workflow_dispatch:
 permissions:
@@ -35,7 +35,7 @@ jobs:
           set -euo pipefail
           while IFS= read -r -d '' file; do node --check "$file"; done < <(find apps packages -type f -name '*.js' -not -path '*/node_modules/*' -print0)
       - name: Run engine unit tests
-        run: node --test tests/unit/engine.test.mjs
+        run: node --test tests/unit/*.test.mjs
       - uses: android-actions/setup-android@v4
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses
@@ -76,7 +76,7 @@ jobs:
 
   publish-repository-download:
     name: Publish APK in repository download branch
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feat/standalone-android-runtime'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/feat/standalone-android-runtime' || startsWith(github.ref, 'refs/heads/fix/'))
     needs: verify-and-build
     runs-on: ubuntu-latest
     permissions:

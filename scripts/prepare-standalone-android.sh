@@ -105,6 +105,11 @@ rm -rf \
   "$APP_ASSETS/node_modules/@img/sharp-linuxmusl-arm64" \
   "$APP_ASSETS/node_modules/@img/sharp-libvips-linuxmusl-arm64"
 
+# Stamp the source revision into the installed bundle. Runtime assets are cached
+# in app-private storage, so versionCode alone is not enough after hotfix builds.
+BUNDLE_VERSION="$(git rev-parse HEAD)"
+printf '%s\n' "$BUNDLE_VERSION" > "$APP_ASSETS/.skywa-bundle-version"
+
 echo "Embedded Node.js runtime: ${RUNTIME_VERSION} (SHA-256 verified)"
 echo "Runtime library: ${APP_LIBNODE}/bin/arm64-v8a/libnode.so"
 echo "Production engine bundle: ${APP_ASSETS}"
