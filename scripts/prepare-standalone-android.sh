@@ -44,22 +44,16 @@ rm -rf "$APP_LIBNODE"
 mkdir -p "$APP_LIBNODE/include/node"
 cp -R "$(dirname "$HEADER_FILE")/." "$APP_LIBNODE/include/node/"
 
-# The APK includes common Android ABIs. arm64-v8a is required;
-# other ABIs are included when the pinned runtime actually ships them.
-for ABI in arm64-v8a armeabi-v7a x86_64; do
-  LIBRARY="$(find "$WORK/unpacked" -type f -name libnode.so -path "*/${ABI}/libnode.so" -print -quit)"
-  if [[ -z "$LIBRARY" ]]; then
-    if [[ "$ABI" == "arm64-v8a" ]]; then
-      echo "ERROR: required arm64-v8a/libnode.so is missing from the runtime." >&2
-      exit 1
-    fi
-    echo "ERROR: runtime does not include required ABI ${ABI}." >&2
-    exit 1
-  fi
-
-  mkdir -p "$APP_LIBNODE/bin/${ABI}"
-  cp "$LIBRARY" "$APP_LIBNODE/bin/${ABI}/libnode.so"
-done
+# This APK targets modern 64-bit Android phones. Keeping only arm64-v8a
+# cuts more than 120 MiB compared with a universal APK.
+ABI="arm64-v8a"
+LIBRARY="$(find "$WORK/unpacked" -type f -name libnode.so -path "*/${ABI}/libnode.so" -print -quit)"
+if [[ -z "$LIBRARY" ]]; then
+  echo "ERROR: required arm64-v8a/libnode.so is missing from the runtime." >&2
+  exit 1
+fi
+mkdir -p "$APP_LIBNODE/bin/${ABI}"
+cp "$LIBRARY" "$APP_LIBNODE/bin/${ABI}/libnode.so"
 
 # Bundle the existing server and WhatsApp engine without user session data.
 # Install production modules in one shared node_modules directory so both
@@ -96,6 +90,20 @@ NODE
   cd "$APP_ASSETS"
   npm install --omit=dev --no-audit --no-fund
 )
+
+# Baileys only dynamically imports image adapters for media operations and
+# catches missing adapters. SKYWA currently implements text send and text
+# auto-replies; Linux x64 sharp binaries cannot run on Android and are unused.
+rm -rf \
+  "$APP_ASSETS/node_modules/sharp" \
+  "$APP_ASSETS/node_modules/@img/sharp-linux-x64" \
+  "$APP_ASSETS/node_modules/@img/sharp-libvips-linux-x64" \
+  "$APP_ASSETS/node_modules/@img/sharp-linux-arm64" \
+  "$APP_ASSETS/node_modules/@img/sharp-libvips-linux-arm64" \
+  "$APP_ASSETS/node_modules/@img/sharp-linuxmusl-x64" \
+  "$APP_ASSETS/node_modules/@img/sharp-libvips-linuxmusl-x64" \
+  "$APP_ASSETS/node_modules/@img/sharp-linuxmusl-arm64" \
+  "$APP_ASSETS/node_modules/@img/sharp-libvips-linuxmusl-arm64"
 
 echo "Embedded Node.js runtime: ${RUNTIME_VERSION} (SHA-256 verified)"
 echo "Runtime library: ${APP_LIBNODE}/bin/arm64-v8a/libnode.so"
