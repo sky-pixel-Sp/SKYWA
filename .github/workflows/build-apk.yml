@@ -76,7 +76,7 @@ jobs:
 
   publish-repository-download:
     name: Publish APK in repository download branch
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feat/standalone-android-runtime'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/feat/standalone-android-runtime' || startsWith(github.ref, 'refs/heads/fix/'))
     needs: verify-and-build
     runs-on: ubuntu-latest
     permissions:
