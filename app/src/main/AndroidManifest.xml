@@ -9,7 +9,11 @@
       android:label="SKYWA Bot Studio"
       android:theme="@style/Theme.Skywa"
       android:allowBackup="false"
+      android:icon="@drawable/skywa_logo"
       android:usesCleartextTraffic="true">
+    <activity
+        android:name="com.skywa.ui.AISettingsActivity"
+        android:exported="false" />
     <activity
         android:name="com.skywa.ui.MainActivity"
         android:exported="true"
@@ -22,6 +26,7 @@
 
     <service
         android:name="com.skywa.runtime.NodeService"
+        android:process=":node_runtime"
         android:exported="false"
         android:foregroundServiceType="specialUse"
         android:stopWithTask="false">
