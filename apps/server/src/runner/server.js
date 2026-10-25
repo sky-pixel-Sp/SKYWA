@@ -4,7 +4,8 @@ import path from 'node:path';
 import {createServer} from 'node:http';
 import {initDB, getSetting, saveSetting} from '../database.js';
 import * as controller from '../lib/runtimeController.js';
-import {logoutWhatsApp, sendText, getAutoReplyConfig, setAutoReplyConfig} from '../../../../packages/whatsapp-engine/src/engine.js';
+import {logoutWhatsApp, sendText, getAutoReplyConfig, setAutoReplyConfig, getAIConfig, setAIConfig} from '../../../../packages/whatsapp-engine/src/engine.js';
+import {normalizeAIConfig, generateAIReply} from '../../../../packages/whatsapp-engine/src/ai-provider.js';
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -63,6 +64,33 @@ app.post('/api/bot/config', (req, res) => {
   res.json({status:'saved', config});
 });
 
+app.get('/api/ai/config', (_req, res) => {
+  const config = getAIConfig();
+  const {apiKey, ...safe} = config;
+  res.json({...safe, hasApiKey:Boolean(apiKey)});
+});
+app.post('/api/ai/config', (req, res) => {
+  try {
+    const body = req.body || {};
+    const current = getAIConfig();
+    const apiKey = typeof body.apiKey === 'string' && body.apiKey.trim() ? body.apiKey.trim() : current.apiKey;
+    const config = normalizeAIConfig({...current, ...body, apiKey, hasApiKey:Boolean(apiKey)});
+    setAIConfig(config);
+    saveSetting('aiConfig', config);
+    const {apiKey:secret, ...safe} = config;
+    res.json({status:'saved', ...safe, hasApiKey:Boolean(secret)});
+  } catch (error) { res.status(400).json({status:'failed', error:error.message || 'AI config invalid'}); }
+});
+app.post('/api/ai/test', async (req, res) => {
+  try {
+    const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim().slice(0, 6000) : '';
+    if (!prompt) return res.status(400).json({error:'Isi pertanyaan untuk tes AI'});
+    const config = getAIConfig();
+    const reply = await generateAIReply({...config, enabled:true}, prompt);
+    res.json({status:'ok', reply, provider:config.provider, model:config.model});
+  } catch (error) { res.status(502).json({status:'failed', error:error.message || 'AI test failed'}); }
+});
+
 app.get('/api/system/diagnostics', (_req, res) => {
   const h = controller.getHealth();
   res.json({
@@ -91,6 +119,11 @@ app.use((error, req, res, _next) => {
 });
 
 initDB();
+const storedAIConfig = getSetting('aiConfig');
+if (storedAIConfig) {
+  try { setAIConfig(storedAIConfig); }
+  catch (error) { console.error('[SKYWA] Stored AI config was ignored:', error.message); }
+}
 const storedBotConfig = getSetting('botConfig');
 if (storedBotConfig) {
   try { setAutoReplyConfig(storedBotConfig); }
