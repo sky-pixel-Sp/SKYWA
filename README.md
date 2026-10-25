@@ -4,7 +4,7 @@ SKYWA is a native Android application for controlling the SKYWA WhatsApp automat
 
 ## Product requirement
 
-The product target is **one installable Android APK**. End users should not need a website, browser, Termux, shell commands, or a separately running backend. The Android build now has a JNI/C++ bridge and a foreground service intended to start the embedded Node.js runtime, backend, Baileys engine, and production dependencies from within the installed app.
+The product target is **one installable Android APK**. End users should not need a website, browser, Termux, shell commands, or a separately running backend. The Android build now has a JNI/C++ bridge and a foreground service intended to start the embedded Node.js runtime, backend, Baileys engine, and production dependencies from within the installed app. The current debug APK targets 64-bit ARM Android devices to avoid packaging two additional CPU runtimes.
 
 ## Standalone runtime status
 
