@@ -74,32 +74,32 @@ jobs:
             echo "- APK verification: ${VERIFY_OUTCOME:-not reached}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  publish-release:
-    name: Publish APK download on main
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/standalone-android-runtime')
+  publish-repository-download:
+    name: Publish APK in repository download branch
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feat/standalone-android-runtime'
     needs: verify-and-build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
       - name: Download verified APK
         uses: actions/download-artifact@v4
         with:
           name: SKYWA-debug-apk-${{ github.sha }}
           path: release
       - name: Prepare stable filename
-        run: cp release/app-debug.apk release/SKYWA-debug.apk
-      - name: Publish preview release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: skywa-build-${{ github.run_number }}
-          target_commitish: ${{ github.sha }}
-          name: SKYWA Android APK build ${{ github.run_number }}
-          body: |
-            Automatically built APK from a successful syntax, unit-test, Android build and package-metadata verification run.
-            
-            This is a debug APK containing the embedded Node.js runtime and local SKYWA backend. WhatsApp pairing, message delivery, background behavior, and session persistence must still be tested on a real Android device.
-          prerelease: true
-          make_latest: false
-          fail_on_unmatched_files: true
-          files: release/SKYWA-debug.apk
+        run: cp release/app-debug.apk SKYWA-standalone-arm64.apk
+      - name: Publish APK on a dedicated download branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan apk-downloads
+          git add SKYWA-standalone-arm64.apk
+          git commit -m "Publish SKYWA standalone ARM64 APK"
+          git push --force origin HEAD:refs/heads/apk-downloads
