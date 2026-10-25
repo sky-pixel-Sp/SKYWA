@@ -22,10 +22,12 @@ describe('SKYWA AI provider', () => {
     assert.equal(r.body.messages[1].content, 'hello');
   });
 
-  test('builds Gemini generateContent request without OpenRouter headers', () => {
+  test('builds Gemini generateContent request and keeps key out of URL', () => {
     const r = buildAIRequest({provider:'gemini', apiKey:'gem-key', model:'gemini-2.5-flash', systemPrompt:'Be concise'}, 'halo');
-    assert.match(r.url, /generativelanguage\.googleapis\.com\/v1beta\/models\/gemini-2\.5-flash:generateContent\?key=gem-key/);
-    assert.equal(r.url.includes('gem-key'), false);\n    assert.equal(r.headers['x-goog-api-key'], 'gem-key');\n    assert.equal(r.body.contents[0].parts[0].text, 'halo');
+    assert.match(r.url, /generativelanguage\.googleapis\.com\/v1beta\/models\/gemini-2\.5-flash:generateContent$/);
+    assert.equal(r.url.includes('gem-key'), false);
+    assert.equal(r.headers['x-goog-api-key'], 'gem-key');
+    assert.equal(r.body.contents[0].parts[0].text, 'halo');
     assert.equal(r.body.systemInstruction.parts[0].text, 'Be concise');
     assert.equal('Authorization' in r.headers, false);
   });
