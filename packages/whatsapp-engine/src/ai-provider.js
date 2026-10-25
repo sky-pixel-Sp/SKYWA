@@ -95,10 +95,9 @@ function buildProviderRequest(provider, config, userText, history) {
     {role: 'user', parts: [{text: userText}]}
   ];
   const systemInstruction = config.systemPrompt ? {parts: [{text: config.systemPrompt}]} : undefined;
-  const query = new URLSearchParams({key: config.apiKey});
   return {
-    url: 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(config.model) + ':generateContent?' + query.toString(),
-    headers: {'Content-Type': 'application/json'},
+    url: 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(config.model) + ':generateContent',
+    headers: {'Content-Type': 'application/json', 'x-goog-api-key': config.apiKey},
     body: {
       contents,
       ...(systemInstruction ? {systemInstruction} : {}),
