@@ -1,0 +1,8 @@
+<resources>
+  <style name="Theme.Skywa" parent="@android:style/Theme.Material.NoActionBar">
+    <item name="android:fontFamily">sans</item>
+    <item name="android:colorAccent">#6C8CFF</item>
+    <item name="android:navigationBarColor">#101827</item>
+    <item name="android:statusBarColor">#101827</item>
+  </style>
+</resources>

@@ -1,0 +1,4 @@
+{
+  "name":"@skywa/whatsapp-engine","version":"1.0.0","type":"module","main":"src/engine.js",
+  "dependencies":{"@whiskeysockets/baileys":"^6.7.24","pino":"^9.14.0"}
+}
