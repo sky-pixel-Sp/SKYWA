@@ -11,6 +11,8 @@ export const ConnectionState = {
 let sock = null, state = ConnectionState.DISCONNECTED, qr = null, pairing = null, retries = 0;
 let autoReplyConfig = {enabled:false, trigger:'', reply:''};
 let aiConfig = {enabled:false, provider:'openrouter', apiKey:'', model:'openai/gpt-4o-mini', baseUrl:'http://127.0.0.1:11434/v1', systemPrompt:'Kamu adalah asisten WhatsApp yang ramah dan ringkas.', maxTokens:350, temperature:0.6};
+const aiHistories = new Map();
+const MAX_HISTORY_MESSAGES = 12;
 const maxRetries = 10, baseDelay = 2000;
 
 export const getCurrentState = () => state;
@@ -134,6 +136,16 @@ function listenMessages(socket) {
       const text = extractText(message.message).trim();
       if (!text) continue;
       logger.info({from:jid}, 'Incoming message');
+      const command = text.toLowerCase().trim();
+      if (command === '/help' || command === '/start') {
+        await socket.sendMessage(jid, {text:'SKYWA Bot\\n/help — bantuan\\n/reset — hapus memori percakapan AI\\nAI dan auto-reply dikendalikan pemilik bot di aplikasi.'});
+        continue;
+      }
+      if (command === '/reset') {
+        aiHistories.delete(jid);
+        await socket.sendMessage(jid, {text:'Memori percakapan AI untuk chat ini sudah direset.'});
+        continue;
+      }
       const config = autoReplyConfig;
       const matchesStatic = config.enabled && config.reply && (!config.trigger || text.toLowerCase().includes(config.trigger.toLowerCase()));
       const ai = aiConfig;
