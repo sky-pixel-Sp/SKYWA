@@ -13,8 +13,8 @@ let fatalExitStarted = false;
 async function fatalExit(kind, value) {
   if (fatalExitStarted) return;
   fatalExitStarted = true;
-  const entry = {at:new Date().toISOString(),kind,summary:String(value?.message || value || 'Unknown fatal error').replace(/\\b\\+?\\d{8,15}\\b/g,'[nomor disamarkan]').replace(/(?:Bearer\\s+)[^\\s]+/ig,'Bearer [disamarkan]').slice(0,240)};
-  try { await mkdir(path.dirname(crashLog),{recursive:true}); await appendFile(crashLog,JSON.stringify(entry)+'\\n','utf8'); } catch {}
+  const entry = {at:new Date().toISOString(),kind,summary:String(value?.message || value || 'Unknown fatal error').replace(/\b\+?\d{8,15}\b/g,'[nomor disamarkan]').replace(/(?:Bearer\s+)[^\s]+/ig,'Bearer [disamarkan]').slice(0,240)};
+  try { await mkdir(path.dirname(crashLog),{recursive:true}); await appendFile(crashLog,JSON.stringify(entry)+'\n','utf8'); } catch {}
   process.exit(70);
 }
 process.on('uncaughtException', error => { void fatalExit('uncaughtException',error); });
