@@ -77,6 +77,7 @@ app.post('/api/system/stop', async (_req, res) => res.json({...await controller.
 app.post('/api/system/restart', async (req, res) => res.json({...await controller.restartRuntime(req.body || {}), mode:'standalone-android'}));
 app.get('/api/whatsapp/status', (_req, res) => res.json(controller.getWhatsAppStatus()));
 app.post('/api/whatsapp/start', async (req, res) => res.json({...await controller.startRuntime(req.body || {}), endpoint:'whatsapp/start'}));
+app.post('/api/whatsapp/pairing/reset', async (_req, res) => res.json({...await controller.resetUnregisteredPairingSession(), endpoint:'whatsapp/pairing/reset'}));
 app.post('/api/whatsapp/stop', async (_req, res) => res.json({...await controller.stopRuntime(), endpoint:'whatsapp/stop', note:'Disconnect only; session preserved'}));
 
 app.post('/api/whatsapp/logout', async (_req, res) => {

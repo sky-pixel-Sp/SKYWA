@@ -1,8 +1,5 @@
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import pino from 'pino';
-import {access, readFile, rename} from 'node:fs/promises';
-import path from 'node:path';
-import {createPairingController, quarantineUnregisteredSession, safeDisconnectSummary, PAIRING_STAGES} from './pairing-controller.js';
 import {generateAIReply, normalizeAIConfig} from './ai-provider.js';
 import {createReconnectScheduler} from './reconnect-scheduler.js';
 import {normalizeAutomationConfig, findAutomationRule, isHelpOrResetCommand, reserveAutomationReply, releaseAutomationReservation, recordAutomationReply, recordAutomationEvent, getAutomationStats, resetAutomationStats} from './automation.js';
@@ -14,18 +11,6 @@ export const ConnectionState = {
   RECONNECTING:'RECONNECTING', STOPPING:'STOPPING', ERROR:'ERROR'
 };
 let sock = null, state = ConnectionState.DISCONNECTED, qr = null, pairing = null, retries = 0;
-let pairingStage = PAIRING_STAGES.IDLE, pairingExpiresAt = null, lastDisconnect = null;
-const connectionHistory = [];
-const PAIRING_CODE_TTL_MS = 180000;
-const MAX_PAIRING_RETRIES = 2;
-const recordConnectionEvent = (event, details = {}) => {
-  const item = {at:Date.now(), event:String(event).slice(0,48), state, ...details};
-  delete item.phoneNumber; delete item.token;
-  connectionHistory.push(item);
-  if (connectionHistory.length > 20) connectionHistory.splice(0, connectionHistory.length - 20);
-};
-export const getPairingDiagnostics = () => ({lastDisconnect, pairingStage, pairingExpiresAt, history:connectionHistory.map(item=>({...item}))});
-export function resetPairingDiagnostics() { lastDisconnect=null; pairingStage=PAIRING_STAGES.IDLE; pairingExpiresAt=null; pairing=null; recordConnectionEvent('pairing-reset'); }
 let autoReplyConfig = {enabled:false, trigger:'', reply:''};
 let lifecycleGeneration = 0;
 const reconnectScheduler = createReconnectScheduler();
@@ -74,14 +59,7 @@ export function isConnected() {
 }
 
 async function createSocket(sessionId) {
-  const sessionPath = path.resolve('./data/sessions/' + sessionId);
-  await quarantineUnregisteredSession({
-    sessionPath,
-    exists: async p => { try { await access(p); return true; } catch { return false; } },
-    readCreds: async p => JSON.parse(await readFile(p, 'utf8')),
-    renamePath: rename
-  });
-  const auth = await useMultiFileAuthState(sessionPath);
+  const auth = await useMultiFileAuthState('./data/sessions/' + sessionId);
   const latest = await fetchLatestBaileysVersion();
   const socket = makeWASocket({
     version: latest.version,
@@ -96,83 +74,49 @@ async function createSocket(sessionId) {
 }
 
 function attach(socket, sessionId, phoneNumber, generation) {
-  const unregisteredAtAttach = socket.authState?.creds?.registered !== true;
-  let pairingController = null;
-  if (phoneNumber && unregisteredAtAttach) {
-    pairingStage = PAIRING_STAGES.WAITING_SOCKET;
-    recordConnectionEvent('pairing-started');
-    pairingController = createPairingController({
-      socket, phoneNumber,
-      timeoutMs:15000,
-      onCode: code => {
-        if (generation !== lifecycleGeneration || socket !== sock) return;
-        pairing = code;
-        pairingStage = PAIRING_STAGES.CODE_READY;
-        pairingExpiresAt = Date.now() + PAIRING_CODE_TTL_MS;
-        setState(ConnectionState.PAIRING);
-        recordConnectionEvent('pairing-code-ready');
-      },
-      onStage: (stage, error) => {
-        if (generation !== lifecycleGeneration || socket !== sock) return;
-        pairingStage = stage;
-        if (stage === PAIRING_STAGES.WAITING_CODE) setState(ConnectionState.PAIRING);
-        if (stage === PAIRING_STAGES.FAILED) {
-          lastDisconnect = safeDisconnectSummary({message:error || 'Gagal meminta kode pairing.'});
-          setState(ConnectionState.ERROR);
-          recordConnectionEvent('pairing-failed', {reason:lastDisconnect.reason, statusCode:lastDisconnect.statusCode});
-        }
-      }
-    });
-  }
-  socket.ev.on('connection.update', update => {
+  let pairingRequested = false;
+  socket.ev.on('connection.update', async update => {
     if (generation !== lifecycleGeneration || socket !== sock) return;
     if (update.qr) {
       qr = update.qr;
-      if (phoneNumber && unregisteredAtAttach) {
-        pairingStage = PAIRING_STAGES.WAITING_CODE;
-      } else {
-        setState(ConnectionState.QR_PENDING);
-      }
-      recordConnectionEvent('qr-received');
+      setState(ConnectionState.QR_PENDING);
     }
+
+    const registered = Boolean(socket.authState?.creds?.registered);
+    if (phoneNumber && !registered && !pairing && !pairingRequested) {
+      pairingRequested = true;
+      try {
+        setState(ConnectionState.PAIRING);
+        const code = await socket.requestPairingCode(phoneNumber);
+        pairing = code.match(/.{1,4}/g)?.join('-') || code;
+      } catch (error) {
+        pairingRequested = false;
+        logger.error({err:error}, 'Pairing code request failed');
+        setState(ConnectionState.ERROR);
+      }
+    }
+
     if (update.connection === 'open') {
       reconnectScheduler.cancel();
       setState(ConnectionState.CONNECTED);
       retries = 0;
-      pairingStage = PAIRING_STAGES.CONNECTED;
-      pairingExpiresAt = null;
       qr = null;
       pairing = null;
-      lastDisconnect = null;
-      recordConnectionEvent('connected');
     }
+
     if (update.connection === 'close') {
-      const error = update.lastDisconnect?.error;
-      const summary = safeDisconnectSummary(error);
-      lastDisconnect = summary;
-      recordConnectionEvent('connection-closed', {statusCode:summary.statusCode, reason:summary.reason});
-      if (pairingController) pairingController.dispose();
-      qr = null;
-      if (summary.statusCode === DisconnectReason.loggedOut || summary.statusCode === 401) {
+      const reason = update.lastDisconnect?.error?.output?.statusCode;
+      if (reason === DisconnectReason.loggedOut) {
         reconnectScheduler.cancel();
         if (sock === socket) sock = null;
         lifecycleGeneration++;
-        pairingStage = unregisteredAtAttach ? PAIRING_STAGES.FAILED : PAIRING_STAGES.IDLE;
+        setState(ConnectionState.DISCONNECTED);
+        qr = null;
         pairing = null;
-        setState(unregisteredAtAttach ? ConnectionState.ERROR : ConnectionState.DISCONNECTED);
-        recordConnectionEvent(summary.statusCode === 401 ? 'unauthorized-401' : 'logged-out', {statusCode:summary.statusCode, reason:summary.reason});
-        return;
-      }
-      if (unregisteredAtAttach && retries >= MAX_PAIRING_RETRIES) {
-        pairingStage = PAIRING_STAGES.FAILED;
-        setState(ConnectionState.ERROR);
-        recordConnectionEvent('pairing-retry-limit', {statusCode:summary.statusCode, reason:summary.reason});
         return;
       }
       if (retries >= maxRetries) {
-        pairingStage = PAIRING_STAGES.FAILED;
         setState(ConnectionState.ERROR);
-        recordConnectionEvent('reconnect-limit-reached', {statusCode:summary.statusCode, reason:summary.reason});
         return;
       }
       setState(ConnectionState.RECONNECTING);
@@ -190,21 +134,17 @@ function attach(socket, sessionId, phoneNumber, generation) {
           listenMessages(next);
         } catch (error) {
           if (generation === lifecycleGeneration) {
-            lastDisconnect = safeDisconnectSummary(error);
             logger.error({err:error}, 'Reconnect failed');
-            pairingStage = PAIRING_STAGES.FAILED;
             setState(ConnectionState.ERROR);
-            recordConnectionEvent('reconnect-failed', {reason:lastDisconnect.reason});
           }
         }
       }, delay);
-    } else if (update.connection === 'connecting' && state !== ConnectionState.PAIRING) {
+    } else if (update.connection === 'connecting' && state !== ConnectionState.QR_PENDING && state !== ConnectionState.PAIRING) {
       setState(ConnectionState.CONNECTING);
-      if (phoneNumber && unregisteredAtAttach) pairingStage = PAIRING_STAGES.WAITING_SOCKET;
-      recordConnectionEvent('connecting');
     }
   });
 }
+
 function extractText(message) {
   const value = message?.message || {};
   return value.conversation
@@ -292,9 +232,6 @@ export async function startWhatsApp(sessionId = 'main', options = {}) {
   setState(ConnectionState.STARTING);
   qr = null;
   pairing = null;
-  pairingStage = options.usePairingCode ? PAIRING_STAGES.WAITING_SOCKET : PAIRING_STAGES.IDLE;
-  pairingExpiresAt = null;
-  retries = 0;
   try {
     const next = await createSocket(sessionId);
     if (generation !== lifecycleGeneration) {
@@ -329,8 +266,6 @@ export async function stopWhatsApp() {
   setState(ConnectionState.DISCONNECTED);
   qr = null;
   pairing = null;
-  pairingStage = PAIRING_STAGES.IDLE;
-  pairingExpiresAt = null;
   retries = 0;
 }
 
