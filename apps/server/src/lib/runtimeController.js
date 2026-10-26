@@ -43,8 +43,10 @@ export function getHealth() {
 export function getWhatsAppStatus() {
   return {state:getCurrentState(),connected:isConnected(),qr:getQRCode(),pairing:getPairingCode(),sessionId:'main', ...getPairingDiagnostics()};
 }
-export async function resetUnregisteredPairingSession() {
+export async function resetUnregisteredPairingSession(phoneNumber) {
+  const normalized=String(phoneNumber||'').replace(/[\\s()+-]/g,'');
+  if(!/^\\d{10,15}$/.test(normalized)) throw new TypeError('Masukkan nomor WhatsApp internasional 10–15 digit tanpa kode negara +.');
   await stopRuntimeNow();
   resetPairingDiagnostics();
-  return startRuntimeNow({});
+  return startRuntimeNow({usePairingCode:true,phoneNumber:normalized});
 }

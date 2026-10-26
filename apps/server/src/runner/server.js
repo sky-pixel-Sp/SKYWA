@@ -1,12 +1,24 @@
 import express from 'express';
 import {timingSafeEqual} from 'node:crypto';
-import {readFile} from 'node:fs/promises';
+import {readFile, appendFile, mkdir, rm} from 'node:fs/promises';
 import path from 'node:path';
 import {createServer} from 'node:http';
 import {initDB, getSetting, saveSetting} from '../database.js';
 import * as controller from '../lib/runtimeController.js';
 import {logoutWhatsApp, sendText, getAutoReplyConfig, setAutoReplyConfig, getAIConfig, setAIConfig, getAutomationConfig, setAutomationConfig, getAutomationStats, resetAutomationStats} from '../../../../packages/whatsapp-engine/src/engine.js';
 import {normalizeAIConfig, generateAIReply} from '../../../../packages/whatsapp-engine/src/ai-provider.js';
+
+const crashLog = path.resolve('./data/runtime-crash.log');
+let fatalExitStarted = false;
+async function fatalExit(kind, value) {
+  if (fatalExitStarted) return;
+  fatalExitStarted = true;
+  const entry = {at:new Date().toISOString(),kind,summary:String(value?.message || value || 'Unknown fatal error').replace(/\\b\\+?\\d{8,15}\\b/g,'[nomor disamarkan]').replace(/(?:Bearer\\s+)[^\\s]+/ig,'Bearer [disamarkan]').slice(0,240)};
+  try { await mkdir(path.dirname(crashLog),{recursive:true}); await appendFile(crashLog,JSON.stringify(entry)+'\\n','utf8'); } catch {}
+  process.exit(70);
+}
+process.on('uncaughtException', error => { void fatalExit('uncaughtException',error); });
+process.on('unhandledRejection', reason => { void fatalExit('unhandledRejection',reason); });
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -77,7 +89,7 @@ app.post('/api/system/stop', async (_req, res) => res.json({...await controller.
 app.post('/api/system/restart', async (req, res) => res.json({...await controller.restartRuntime(req.body || {}), mode:'standalone-android'}));
 app.get('/api/whatsapp/status', (_req, res) => res.json(controller.getWhatsAppStatus()));
 app.post('/api/whatsapp/start', async (req, res) => res.json({...await controller.startRuntime(req.body || {}), endpoint:'whatsapp/start'}));
-app.post('/api/whatsapp/pairing/reset', async (_req, res) => res.json({...await controller.resetUnregisteredPairingSession(), endpoint:'whatsapp/pairing/reset'}));
+app.post('/api/whatsapp/pairing/reset', async (req, res) => { try { return res.json({...await controller.resetUnregisteredPairingSession(req.body?.phoneNumber), endpoint:'whatsapp/pairing/reset'}); } catch(error) { return res.status(400).json({status:'failed',error:error.message||'Reset pairing gagal'}); } });
 app.post('/api/whatsapp/stop', async (_req, res) => res.json({...await controller.stopRuntime(), endpoint:'whatsapp/stop', note:'Disconnect only; session preserved'}));
 
 app.post('/api/whatsapp/logout', async (_req, res) => {

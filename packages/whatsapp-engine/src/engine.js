@@ -2,7 +2,7 @@ import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaile
 import pino from 'pino';
 import {access, readFile, rename} from 'node:fs/promises';
 import path from 'node:path';
-import {createPairingController, quarantineUnregisteredSession, safeDisconnectSummary, PAIRING_STAGES} from './pairing-controller.js';
+import {createPairingController, quarantineUnregisteredSession, safeDisconnectSummary, decideAfterClose, PAIRING_STAGES} from './pairing-controller.js';
 import {generateAIReply, normalizeAIConfig} from './ai-provider.js';
 import {createReconnectScheduler} from './reconnect-scheduler.js';
 import {normalizeAutomationConfig, findAutomationRule, isHelpOrResetCommand, reserveAutomationReply, releaseAutomationReservation, recordAutomationReply, recordAutomationEvent, getAutomationStats, resetAutomationStats} from './automation.js';
@@ -95,6 +95,7 @@ function attach(socket, sessionId, phoneNumber, generation) {
   }
   socket.ev.on('connection.update', update => {
     if(generation!==lifecycleGeneration||socket!==sock)return;
+    if(update.isNewLogin)pairingStage=PAIRING_STAGES.LINKING;
     if(update.qr){qr=update.qr;if(phoneNumber&&unregisteredAtAttach)pairingStage=PAIRING_STAGES.WAITING_CODE;else setState(ConnectionState.QR_PENDING);recordConnectionEvent('qr-received');}
     if(update.connection==='open'){reconnectScheduler.cancel();setState(ConnectionState.CONNECTED);retries=0;pairingStage=PAIRING_STAGES.CONNECTED;pairingExpiresAt=null;qr=null;pairing=null;lastDisconnect=null;recordConnectionEvent('connected');}
     if(update.connection==='close'){
@@ -105,9 +106,14 @@ function attach(socket, sessionId, phoneNumber, generation) {
       if(summary.statusCode===DisconnectReason.loggedOut||summary.statusCode===401){
         reconnectScheduler.cancel();if(sock===socket)sock=null;lifecycleGeneration++;pairingStage=unregisteredAtAttach?PAIRING_STAGES.FAILED:PAIRING_STAGES.IDLE;pairing=null;setState(unregisteredAtAttach?ConnectionState.ERROR:ConnectionState.DISCONNECTED);recordConnectionEvent(summary.statusCode===401?'unauthorized-401':'logged-out',{statusCode:summary.statusCode,reason:summary.reason});return;
       }
-      if((unregisteredAtAttach&&retries>=MAX_PAIRING_RETRIES)||retries>=maxRetries){pairingStage=PAIRING_STAGES.FAILED;setState(ConnectionState.ERROR);recordConnectionEvent('reconnect-limit-reached',{statusCode:summary.statusCode,reason:summary.reason});return;}
-      setState(ConnectionState.RECONNECTING);const delay=Math.min(baseDelay*(2**retries++),60000);
-      reconnectScheduler.schedule(async()=>{if(generation!==lifecycleGeneration||sock!==socket)return;try{const next=await createSocket(sessionId);if(generation!==lifecycleGeneration||sock!==socket){try{next.end(undefined);}catch(_){}return;}sock=next;attach(next,sessionId,phoneNumber,generation);listenMessages(next);}catch(error){if(generation===lifecycleGeneration){lastDisconnect=safeDisconnectSummary(error);logger.error({err:error},'Reconnect failed');pairingStage=PAIRING_STAGES.FAILED;setState(ConnectionState.ERROR);recordConnectionEvent('reconnect-failed',{reason:lastDisconnect.reason});}}},delay);
+      const registeredNow=socket.authState?.creds?.registered===true;
+      if(update.lastDisconnect?.error?.data?.isNewLogin) pairingStage=PAIRING_STAGES.LINKING;
+      const decision=decideAfterClose({statusCode:summary.statusCode,registeredNow,retries,maxRetries,maxPairingRetries:3});
+      if(decision.action==='stop'){reconnectScheduler.cancel();if(sock===socket)sock=null;pairingStage=decision.stage;setState(ConnectionState.ERROR);recordConnectionEvent('reconnect-limit-reached',{statusCode:summary.statusCode,reason:summary.reason});return;}
+      pairingStage=decision.stage;
+      setState(ConnectionState.RECONNECTING);
+      const delay=decision.action==='reconnect-immediately'?0:Math.min(baseDelay*(2**retries++),60000);
+      reconnectScheduler.schedule(async()=>{if(generation!==lifecycleGeneration||sock!==socket)return;try{const next=await createSocket(sessionId);if(generation!==lifecycleGeneration||sock!==socket){try{next.end(undefined);}catch(_){}return;}sock=next;attach(next,sessionId,phoneNumber,generation);listenMessages(next);}catch(error){if(generation===lifecycleGeneration){lastDisconnect=safeDisconnectSummary(error);logger.error({reason:lastDisconnect.reason},'Reconnect failed');pairingStage=PAIRING_STAGES.FAILED;setState(ConnectionState.ERROR);recordConnectionEvent('reconnect-failed',{reason:lastDisconnect.reason});}}},delay);
     } else if(update.connection==='connecting'&&state!==ConnectionState.PAIRING){setState(ConnectionState.CONNECTING);if(phoneNumber&&unregisteredAtAttach)pairingStage=PAIRING_STAGES.WAITING_SOCKET;recordConnectionEvent('connecting');}
   });
 }

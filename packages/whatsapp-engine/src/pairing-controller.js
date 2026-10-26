@@ -3,9 +3,17 @@ import path from 'node:path';
 
 export const PAIRING_STAGES = Object.freeze({
   IDLE:'idle', WAITING_SOCKET:'menunggu-socket', WAITING_CODE:'menunggu-kode',
-  CODE_READY:'kode-siap', WAITING_CONFIRMATION:'menunggu-konfirmasi',
+  CODE_READY:'kode-siap', WAITING_CONFIRMATION:'menunggu-konfirmasi', LINKING:'menyelesaikan-penautan',
   CONNECTED:'terhubung', FAILED:'gagal'
 });
+
+export function decideAfterClose({statusCode, registeredNow, retries = 0, maxRetries = 10, maxPairingRetries = 3}) {
+  if (registeredNow === true) return {action: statusCode === 515 ? 'reconnect-immediately' : 'reconnect', stage: PAIRING_STAGES.LINKING};
+  if (statusCode === 401 || statusCode === 403) return {action:'stop', stage:PAIRING_STAGES.FAILED};
+  if (statusCode === 515) return {action:'reconnect-immediately', stage:PAIRING_STAGES.WAITING_SOCKET};
+  if (retries >= maxPairingRetries || retries >= maxRetries) return {action:'stop', stage:PAIRING_STAGES.FAILED};
+  return {action:'reconnect', stage:PAIRING_STAGES.WAITING_SOCKET};
+}
 
 export function isContaminatedUnregisteredSession(creds) {
   return Boolean(creds && creds.registered !== true);
@@ -56,7 +64,7 @@ export function createPairingController({socket, phoneNumber, onCode, onStage, t
       if (!code) throw new Error('WhatsApp tidak mengembalikan kode pairing.');
       clearTimeout(timer);
       onCode?.(String(code).match(/.{1,4}/g)?.join('-') || String(code));
-      setStage(PAIRING_STAGES.CODE_READY);
+      setStage(PAIRING_STAGES.WAITING_CONFIRMATION);
     } catch (error) {
       clearTimeout(timer);
       setStage(PAIRING_STAGES.FAILED, error?.message || 'Gagal meminta kode pairing.');
@@ -64,8 +72,9 @@ export function createPairingController({socket, phoneNumber, onCode, onStage, t
   };
   const onUpdate = update => {
     if (update?.qr) void requestOnce();
+    if (update?.isNewLogin) setStage(PAIRING_STAGES.LINKING);
     if (update?.connection === 'open') { clearTimeout(timer); setStage(PAIRING_STAGES.CONNECTED); }
-    if (update?.connection === 'close') { clearTimeout(timer); setStage(PAIRING_STAGES.FAILED, 'Socket WhatsApp terputus sebelum pairing selesai.'); }
+    if (update?.connection === 'close') { clearTimeout(timer); if (socket.authState?.creds?.registered !== true) setStage(PAIRING_STAGES.WAITING_SOCKET); }
   };
   socket.ev.on('connection.update', onUpdate);
   return {dispose() { clearTimeout(timer); socket.ev.off?.('connection.update', onUpdate); }, hasRequested:()=>requested};
