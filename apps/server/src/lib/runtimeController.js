@@ -2,7 +2,7 @@ import {startWhatsApp,stopWhatsApp,getSock,getCurrentState,isConnected,getQRCode
 import {createSerialExecutor} from './serial-operations.js';
 import {access, readFile, rename} from 'node:fs/promises';
 import path from 'node:path';
-import {quarantineUnregisteredSession} from '../../../../packages/whatsapp-engine/src/pairing-controller.js';
+import {quarantineUnregisteredSession, normalizePairingPhoneNumber, assertPairingResetAllowed} from '../../../../packages/whatsapp-engine/src/pairing-controller.js';
 
 let controllerState='stopped',lastError=null,startTime=null;
 const serializeOperation=createSerialExecutor();
@@ -46,26 +46,29 @@ export function getHealth() {
 export function getWhatsAppStatus() {
   return {state:getCurrentState(),connected:isConnected(),qr:getQRCode(),pairing:getPairingCode(),sessionId:'main', ...getPairingDiagnostics()};
 }
-export async function resetUnregisteredPairingSession(phoneNumber) {
-  const normalized=String(phoneNumber||'').replace(/[\s()+-]/g,'');
-  if(!/^\d{10,15}$/.test(normalized)) throw new TypeError('Masukkan nomor WhatsApp internasional 10–15 digit tanpa kode negara +.');
-  const sessionPath=path.resolve('./data/sessions/main');
-  let creds=null;
-  try {
-    creds=JSON.parse(await readFile(path.join(sessionPath,'creds.json'),'utf8'));
-  } catch(error) {
-    if(error?.code!=='ENOENT') throw new Error('Kredensial sesi tidak dapat dibaca; reset dibatalkan agar data sesi tetap aman.');
-  }
-  if(creds?.registered===true) throw new Error('Sesi WhatsApp sudah terdaftar. Reset pairing dibatalkan agar sesi aktif tidak disentuh.');
-  const stopped=await stopRuntimeNow();
-  if(stopped.status==='failed') throw new Error('Runtime tidak berhasil berhenti; sesi pairing tidak diubah.');
-  const quarantine=await quarantineUnregisteredSession({
-    sessionPath,
-    exists:async p=>{try{await access(p);return true;}catch(error){if(error?.code==='ENOENT')return false;throw error;}},
-    readCreds:async p=>JSON.parse(await readFile(p,'utf8')),
-    renamePath:rename
+export function resetUnregisteredPairingSession(phoneNumber) {
+  return serializeOperation(async()=>{
+    const normalized=normalizePairingPhoneNumber(phoneNumber);
+    const liveCreds=getSock()?.authState?.creds;
+    assertPairingResetAllowed(liveCreds);
+    const sessionPath=path.resolve('./data/sessions/main');
+    let creds=null;
+    try {
+      creds=JSON.parse(await readFile(path.join(sessionPath,'creds.json'),'utf8'));
+    } catch(error) {
+      if(error?.code!=='ENOENT') throw new Error('Kredensial sesi tidak dapat dibaca; reset dibatalkan agar data sesi tetap aman.');
+    }
+    assertPairingResetAllowed(creds);
+    const stopped=await stopRuntimeNow();
+    if(stopped.status==='failed') throw new Error('Runtime tidak berhasil berhenti; sesi pairing tidak diubah.');
+    const quarantine=await quarantineUnregisteredSession({
+      sessionPath,
+      exists:async p=>{try{await access(p);return true;}catch(error){if(error?.code==='ENOENT')return false;throw error;}},
+      readCreds:async p=>JSON.parse(await readFile(p,'utf8')),
+      renamePath:rename
+    });
+    resetPairingDiagnostics();
+    const started=await startRuntimeNow({usePairingCode:true,phoneNumber:normalized});
+    return {...started,pairingReset:{quarantined:quarantine.moved,reason:quarantine.reason||null}};
   });
-  resetPairingDiagnostics();
-  const started=await startRuntimeNow({usePairingCode:true,phoneNumber:normalized});
-  return {...started,pairingReset:{quarantined:quarantine.moved,reason:quarantine.reason||null}};
 }
