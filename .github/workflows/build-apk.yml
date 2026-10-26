@@ -39,7 +39,7 @@ jobs:
           set -euo pipefail
           while IFS= read -r -d '' file; do node --check "$file"; done < <(find apps packages -type f -name '*.js' -not -path '*/node_modules/*' -print0)
       - name: Lint JavaScript (undefined identifiers fail CI)
-        run: npx --yes --package eslint@9 --package globals eslint apps packages tests --max-warnings=0
+        run: npx --yes --package eslint@9 --package globals eslint apps packages tests --rule 'no-undef:error'
       - name: Run unit and API integration tests
         run: node --test tests/unit/*.test.mjs
       - uses: android-actions/setup-android@v4
