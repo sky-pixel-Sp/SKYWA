@@ -15,6 +15,17 @@ export function decideAfterClose({statusCode, registeredNow, retries = 0, maxRet
   return {action:'reconnect', stage:PAIRING_STAGES.WAITING_SOCKET};
 }
 
+export function normalizePairingPhoneNumber(phoneNumber) {
+  const normalized=String(phoneNumber||'').replace(/[\s()+-]/g,'');
+  if(!/^\d{10,15}$/.test(normalized)) throw new TypeError('Masukkan nomor WhatsApp internasional 10–15 digit tanpa kode negara +.');
+  return normalized;
+}
+
+export function assertPairingResetAllowed(creds) {
+  if(creds?.registered===true) throw new Error('Sesi WhatsApp sudah terdaftar. Reset pairing dibatalkan agar sesi aktif tidak disentuh.');
+  return true;
+}
+
 export function isContaminatedUnregisteredSession(creds) {
   return Boolean(creds && creds.registered !== true);
 }
