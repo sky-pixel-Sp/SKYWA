@@ -718,6 +718,32 @@ public class MainActivity extends Activity {
     }
 
 
+    private String pairingStageLabel(String stage) {
+        switch (stage) {
+            case "menunggu-socket": return "Menunggu koneksi";
+            case "menunggu-kode": return "Meminta kode";
+            case "kode-siap": return "Kode siap";
+            case "menunggu-konfirmasi": return "Menunggu konfirmasi di WhatsApp";
+            case "menyelesaikan-penautan": return "Menyelesaikan penautan";
+            case "terhubung": return "Terhubung";
+            case "gagal": return "Pairing gagal";
+            default: return "Belum dimulai";
+        }
+    }
+
+    private String summarizePairingHistory(org.json.JSONArray history) {
+        if (history == null || history.length() == 0) return "Belum ada peristiwa";
+        StringBuilder summary = new StringBuilder();
+        int start = Math.max(0, history.length() - 3);
+        for (int i = start; i < history.length(); i++) {
+            JSONObject item = history.optJSONObject(i);
+            if (item == null) continue;
+            if (summary.length() > 0) summary.append(" • ");
+            summary.append(item.optString("event", "peristiwa").replaceAll("[^a-zA-Z0-9_-]", ""));
+        }
+        return summary.length() == 0 ? "Belum ada peristiwa" : summary.toString();
+    }
+
     private void copyPairingCode() {
         java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("[A-Z0-9]{4}-[A-Z0-9]{4}").matcher(pairingInfo.getText().toString());
         if (!matcher.find()) {
@@ -735,7 +761,18 @@ public class MainActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("Atur ulang sesi pairing?")
             .setMessage("Sesi belum terdaftar akan diarsipkan. Sesi yang sudah terdaftar tidak akan disentuh.")
             .setNegativeButton("BATAL", (dialog, which) -> dialog.dismiss())
-            .setPositiveButton("ATUR ULANG", (dialog, which) -> performAction("POST", "/api/whatsapp/pairing/reset", new JSONObject(), "Mengatur ulang sesi pairing"))
+            .setPositiveButton("ATUR ULANG", (dialog, which) -> {
+                JSONObject body = new JSONObject();
+                try {
+                    String phone = digits(phoneInput.getText().toString());
+                    if (phone.startsWith("08")) phone = "62" + phone.substring(1);
+                    body.put("phoneNumber", phone);
+                } catch (JSONException error) {
+                    actionStatus.setText("Nomor pairing tidak valid.");
+                    return;
+                }
+                performAction("POST", "/api/whatsapp/pairing/reset", body, "Mengatur ulang sesi pairing");
+            })
             .show();
     }
 
@@ -1051,7 +1088,15 @@ public class MainActivity extends Activity {
                             whatsappStatus.setTextColor(connected ? GREEN : WHITE);
                             homeWhatsAppStatus.setText("WhatsApp • " + (connected ? "TERHUBUNG" : "BELUM TERHUBUNG"));
                             homeWhatsAppStatus.setTextColor(connected ? GREEN : MUTED);
-                            lastWhatsAppDiagnostic = finalWhatsapp.toString();
+                            String diagnosticState = finalWhatsapp.optString("state", "unknown");
+                            String diagnosticStage = finalWhatsapp.optString("pairingStage", "idle");
+                            lastWhatsAppDiagnostic = "state=" + diagnosticState + ", stage=" + diagnosticStage + ", connected=" + connected + ", lastDisconnect=" + finalWhatsapp.optJSONObject("lastDisconnect");
+                            String stage = finalWhatsapp.optString("pairingStage", "idle");
+                            String stageLabel = pairingStageLabel(stage);
+                            long expiresAt = finalWhatsapp.optLong("pairingExpiresAt", 0L);
+                            String countdown = expiresAt > System.currentTimeMillis() ? " • perkiraan sisa " + Math.max(0, (expiresAt - System.currentTimeMillis()) / 1000) + " dtk" : "";
+                            pairingInfo.setTextSize(20);
+                            pairingHistoryInfo.setText("Tahap: " + stageLabel + countdown + "\\nRiwayat: " + summarizePairingHistory(finalWhatsapp.optJSONArray("history")));
                             String code = finalWhatsapp.optString("pairing", "");
                             String qr = finalWhatsapp.optString("qr", "");
                             if (!code.isEmpty()) {
