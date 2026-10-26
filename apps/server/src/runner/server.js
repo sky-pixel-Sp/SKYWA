@@ -244,6 +244,14 @@ async function resumeSavedWhatsAppSession() {
   }
 }
 
+server.on('error', (error) => {
+  if (error && error.code === 'EADDRINUSE') {
+    console.error('[SKYWA] EADDRINUSE: loopback port ' + PORT + ' is already in use. Stop the other local server before starting SKYWA.');
+  } else {
+    console.error('[SKYWA] HTTP server failed:', error && error.code ? error.code : 'UNKNOWN');
+  }
+  // Avoid an unhandled EventEmitter error that would terminate Node without a useful diagnostic.
+});
 server.listen(PORT, BIND, () => {
   console.log('[SKYWA] Server started on ' + BIND + ':' + PORT);
   // Run only after the local API is accepting requests. A fresh install has
