@@ -68,7 +68,6 @@ export function isConnected() {
 
 async function createSocket(sessionId) {
   const sessionPath = path.resolve('./data/sessions/' + sessionId);
-  await quarantineUnregisteredSession({sessionPath, exists:async p=>{try{await access(p);return true;}catch{return false;}}, readCreds:async p=>JSON.parse(await readFile(p,'utf8')), renamePath:rename});
   const auth = await useMultiFileAuthState(sessionPath);
   const latest = await fetchLatestBaileysVersion();
   const socket = makeWASocket({
@@ -203,6 +202,10 @@ export async function startWhatsApp(sessionId = 'main', options = {}) {
   pairingExpiresAt = null;
   retries = 0;
   try {
+    if (options.usePairingCode && options.phoneNumber) {
+      const sessionPath = path.resolve('./data/sessions/' + sessionId);
+      await quarantineUnregisteredSession({sessionPath, exists:async p=>{try{await access(p);return true;}catch{return false;}}, readCreds:async p=>JSON.parse(await readFile(p,'utf8')), renamePath:rename});
+    }
     const next = await createSocket(sessionId);
     if (generation !== lifecycleGeneration) {
       try { next.end(undefined); } catch (_) {}
