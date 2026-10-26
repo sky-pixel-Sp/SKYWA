@@ -26,6 +26,7 @@ let aiConfig = {enabled:false, provider:'openrouter', apiKey:'', model:'openai/g
 const aiHistories = new Map();
 const MAX_HISTORY_MESSAGES = 12;
 let automationConfig = normalizeAutomationConfig({});
+const MAX_PAIRING_RETRIES = 3;
 const maxRetries = 10, baseDelay = 2000;
 
 export const getCurrentState = () => state;
@@ -99,16 +100,16 @@ function attach(socket, sessionId, phoneNumber, generation) {
     if(update.qr){qr=update.qr;if(phoneNumber&&unregisteredAtAttach)pairingStage=PAIRING_STAGES.WAITING_CODE;else setState(ConnectionState.QR_PENDING);recordConnectionEvent('qr-received');}
     if(update.connection==='open'){reconnectScheduler.cancel();setState(ConnectionState.CONNECTED);retries=0;pairingStage=PAIRING_STAGES.CONNECTED;pairingExpiresAt=null;qr=null;pairing=null;lastDisconnect=null;recordConnectionEvent('connected');}
     if(update.connection==='close'){
+      const registeredNow=socket.authState?.creds?.registered===true;
       const summary=safeDisconnectSummary(update.lastDisconnect?.error);
       lastDisconnect=summary;recordConnectionEvent('connection-closed',{statusCode:summary.statusCode,reason:summary.reason});
       if(pairingController)pairingController.dispose();
       qr=null;
       if(summary.statusCode===DisconnectReason.loggedOut||summary.statusCode===401){
-        reconnectScheduler.cancel();if(sock===socket)sock=null;lifecycleGeneration++;pairingStage=unregisteredAtAttach?PAIRING_STAGES.FAILED:PAIRING_STAGES.IDLE;pairing=null;setState(unregisteredAtAttach?ConnectionState.ERROR:ConnectionState.DISCONNECTED);recordConnectionEvent(summary.statusCode===401?'unauthorized-401':'logged-out',{statusCode:summary.statusCode,reason:summary.reason});return;
+        reconnectScheduler.cancel();if(sock===socket)sock=null;lifecycleGeneration++;pairingStage=registeredNow?PAIRING_STAGES.IDLE:PAIRING_STAGES.FAILED;pairing=null;setState(registeredNow?ConnectionState.DISCONNECTED:ConnectionState.ERROR);recordConnectionEvent(summary.statusCode===401?'unauthorized-401':'logged-out',{statusCode:summary.statusCode,reason:summary.reason});return;
       }
-      const registeredNow=socket.authState?.creds?.registered===true;
       if(update.lastDisconnect?.error?.data?.isNewLogin) pairingStage=PAIRING_STAGES.LINKING;
-      const decision=decideAfterClose({statusCode:summary.statusCode,registeredNow,retries,maxRetries,maxPairingRetries:3});
+      const decision=decideAfterClose({statusCode:summary.statusCode,registeredNow,retries,maxRetries,maxPairingRetries:MAX_PAIRING_RETRIES});
       if(decision.action==='stop'){reconnectScheduler.cancel();if(sock===socket)sock=null;pairingStage=decision.stage;setState(ConnectionState.ERROR);recordConnectionEvent('reconnect-limit-reached',{statusCode:summary.statusCode,reason:summary.reason});return;}
       pairingStage=decision.stage;
       setState(ConnectionState.RECONNECTING);

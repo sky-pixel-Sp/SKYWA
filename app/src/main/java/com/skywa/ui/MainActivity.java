@@ -718,6 +718,21 @@ public class MainActivity extends Activity {
     }
 
 
+    private String connectionStateLabel(String state) {
+        switch (state) {
+            case "STARTING": return "Memulai runtime";
+            case "CONNECTING": return "Menghubungkan";
+            case "RECONNECTING": return "Menghubungkan ulang";
+            case "CONNECTED": return "Terhubung";
+            case "DISCONNECTED": return "Terputus";
+            case "QR_PENDING": return "Menunggu QR";
+            case "PAIRING": return "Menyiapkan pairing";
+            case "STOPPING": return "Memutus koneksi";
+            case "ERROR": return "Gangguan koneksi";
+            default: return "Status belum diketahui";
+        }
+    }
+
     private String pairingStageLabel(String stage) {
         switch (stage) {
             case "menunggu-socket": return "Menunggu koneksi";
@@ -1070,7 +1085,7 @@ public class MainActivity extends Activity {
                         backendStatus.setText("SERVER AKTIF");
                         backendStatus.setTextColor(GREEN);
                         controllerStatus.setText("API aktif • database " + finalSystem.optString("database", "unknown")
-                                + " • WhatsApp " + finalSystem.optString("whatsapp_state", "unknown"));
+                                + " • WhatsApp " + connectionStateLabel(finalSystem.optString("whatsapp_state", "unknown")));
                         if (finalBuildInfo != null && buildInfoStatus != null) {
                             buildInfoStatus.setText("Versi " + finalBuildInfo.optString("appVersion", "unknown")
                                 + " • runtime Node " + finalBuildInfo.optString("nodeVersion", "unknown"));
@@ -1084,19 +1099,21 @@ public class MainActivity extends Activity {
                         } else {
                             boolean connected = finalWhatsapp.optBoolean("connected", false);
                             String state = finalWhatsapp.optString("state", "unknown");
-                            whatsappStatus.setText("WhatsApp: " + (connected ? "Terhubung" : state));
+                            whatsappStatus.setText("WhatsApp: " + (connected ? "Terhubung" : connectionStateLabel(state)));
                             whatsappStatus.setTextColor(connected ? GREEN : WHITE);
                             homeWhatsAppStatus.setText("WhatsApp • " + (connected ? "TERHUBUNG" : "BELUM TERHUBUNG"));
                             homeWhatsAppStatus.setTextColor(connected ? GREEN : MUTED);
                             String diagnosticState = finalWhatsapp.optString("state", "unknown");
                             String diagnosticStage = finalWhatsapp.optString("pairingStage", "idle");
-                            lastWhatsAppDiagnostic = "state=" + diagnosticState + ", stage=" + diagnosticStage + ", connected=" + connected + ", lastDisconnect=" + finalWhatsapp.optJSONObject("lastDisconnect");
+                            JSONObject disconnect = finalWhatsapp.optJSONObject("lastDisconnect");
+                            int disconnectCode = disconnect == null ? -1 : disconnect.optInt("statusCode", -1);
+                            lastWhatsAppDiagnostic = "state=" + diagnosticState + ", stage=" + diagnosticStage + ", connected=" + connected + ", disconnectCode=" + disconnectCode;
                             String stage = finalWhatsapp.optString("pairingStage", "idle");
                             String stageLabel = pairingStageLabel(stage);
                             long expiresAt = finalWhatsapp.optLong("pairingExpiresAt", 0L);
                             String countdown = expiresAt > System.currentTimeMillis() ? " • perkiraan sisa " + Math.max(0, (expiresAt - System.currentTimeMillis()) / 1000) + " dtk" : "";
                             pairingInfo.setTextSize(20);
-                            pairingHistoryInfo.setText("Tahap: " + stageLabel + countdown + "\\nRiwayat: " + summarizePairingHistory(finalWhatsapp.optJSONArray("history")));
+                            pairingHistoryInfo.setText("Tahap: " + stageLabel + countdown + "\nRiwayat: " + summarizePairingHistory(finalWhatsapp.optJSONArray("history")));
                             String code = finalWhatsapp.optString("pairing", "");
                             String qr = finalWhatsapp.optString("qr", "");
                             if (!code.isEmpty()) {

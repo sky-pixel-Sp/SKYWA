@@ -104,7 +104,12 @@ public final class NodeService extends Service {
         }
     }
 
-    private void deleteDiagnostic() {\n        File file = new File(getFilesDir(), DIAGNOSTIC_FILE);\n        if (file.exists() && !file.delete()) Log.w(TAG, "Could not clear old runtime diagnostic");\n    }\n\n    private void saveDiagnostic(Throwable error) {
+    private void deleteDiagnostic() {
+        File file = new File(getFilesDir(), DIAGNOSTIC_FILE);
+        if (file.exists() && !file.delete()) Log.w(TAG, "Could not clear old runtime diagnostic");
+    }
+
+    private void saveDiagnostic(Throwable error) {
         StringBuilder report = new StringBuilder(error.getClass().getName())
                 .append(": ").append(String.valueOf(error.getMessage())).append('\n');
         for (StackTraceElement frame : error.getStackTrace()) report.append(" at ").append(frame).append('\n');
