@@ -1,5 +1,6 @@
 import express from 'express';
-import {readFile} from 'node:fs/promises';
+import {timingSafeEqual} from 'node:crypto';
+import {readFile, appendFile, mkdir, rm} from 'node:fs/promises';
 import path from 'node:path';
 import {createServer} from 'node:http';
 import {initDB, getSetting, saveSetting} from '../database.js';
@@ -7,31 +8,65 @@ import * as controller from '../lib/runtimeController.js';
 import {logoutWhatsApp, sendText, getAutoReplyConfig, setAutoReplyConfig, getAIConfig, setAIConfig, getAutomationConfig, setAutomationConfig, getAutomationStats, resetAutomationStats} from '../../../../packages/whatsapp-engine/src/engine.js';
 import {normalizeAIConfig, generateAIReply} from '../../../../packages/whatsapp-engine/src/ai-provider.js';
 
+const crashLog = path.resolve('./data/runtime-crash.log');
+let fatalExitStarted = false;
+async function fatalExit(kind, value) {
+  if (fatalExitStarted) return;
+  fatalExitStarted = true;
+  const entry = {at:new Date().toISOString(),kind,summary:String(value?.message || value || 'Unknown fatal error').replace(/\\b\\+?\\d{8,15}\\b/g,'[nomor disamarkan]').replace(/(?:Bearer\\s+)[^\\s]+/ig,'Bearer [disamarkan]').slice(0,240)};
+  try { await mkdir(path.dirname(crashLog),{recursive:true}); await appendFile(crashLog,JSON.stringify(entry)+'\\n','utf8'); } catch {}
+  process.exit(70);
+}
+process.on('uncaughtException', error => { void fatalExit('uncaughtException',error); });
+process.on('unhandledRejection', reason => { void fatalExit('unhandledRejection',reason); });
+
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const BIND = process.env.SKYWA_BIND || '127.0.0.1';
+const API_TOKEN = typeof process.env.SKYWA_API_TOKEN === 'string' ? process.env.SKYWA_API_TOKEN : '';
+app.use('/api', (req, res, next) => {
+  if (req.path === '/health') return next();
+  if (!API_TOKEN) {
+    return res.status(503).json({status:'unavailable', error:'Token keamanan API lokal belum dikonfigurasi. Restart runtime SKYWA dari aplikasi.'});
+  }
+  const suppliedBytes = Buffer.from(req.get('X-Skywa-Token') || '', 'utf8');
+  const expectedBytes = Buffer.from(API_TOKEN, 'utf8');
+  if (suppliedBytes.length !== expectedBytes.length || !timingSafeEqual(suppliedBytes, expectedBytes)) {
+    return res.status(401).json({status:'unauthorized', error:'Token API lokal tidak valid. Restart runtime dan buka ulang aplikasi SKYWA.'});
+  }
+  return next();
+});
 app.use(express.json({limit:'1mb'}));
 
 app.get('/api/health', (_req, res) => {
   const h = controller.getHealth();
-  res.json({
+  return res.json({
     status: h.controller === 'running' ? 'healthy' : h.controller === 'failed' ? 'degraded' : 'starting',
-    version: process.version, uptime: Math.round(process.uptime()), server:'SKYWA WhatsApp Bot Studio',
-    port:PORT, bind:BIND, database:initDB() ? 'connected' : 'disconnected',
-    controller:h.controller, whatsapp:h.whatsapp, mode:'standalone-android'
+    service: 'SKYWA',
+    mode: 'standalone-android'
   });
 });
 
 app.get('/api/build', async (_req, res) => {
   let bundleVersion = 'unknown';
+  let appVersion = 'unknown';
+  let appVersionCode = null;
   try {
-    bundleVersion = (await readFile(path.resolve(process.cwd(), '.skywa-bundle-version'), 'utf8')).trim() || 'unknown';
+    bundleVersion = (await readFile(path.resolve(process.cwd(), 'skywa-bundle-version.txt'), 'utf8')).trim() || 'unknown';
   } catch (_) {
-    // Older source bundles do not carry a fingerprint file.
+    // A source checkout may not have a staged runtime fingerprint.
   }
-  res.json({
+  try {
+    appVersion = (await readFile(path.resolve(process.cwd(), 'skywa-app-version.txt'), 'utf8')).trim() || 'unknown';
+    const codeText = (await readFile(path.resolve(process.cwd(), 'skywa-app-version-code.txt'), 'utf8')).trim();
+    appVersionCode = /^\d+$/.test(codeText) ? Number(codeText) : null;
+  } catch (_) {
+    // A source checkout may not have Android build metadata staged.
+  }
+  return res.json({
     status: 'ok',
-    appVersion: '1.5.0',
+    appVersion,
+    appVersionCode,
     bundleVersion,
     nodeVersion: process.version,
     uptime: Math.round(process.uptime()),
@@ -54,6 +89,7 @@ app.post('/api/system/stop', async (_req, res) => res.json({...await controller.
 app.post('/api/system/restart', async (req, res) => res.json({...await controller.restartRuntime(req.body || {}), mode:'standalone-android'}));
 app.get('/api/whatsapp/status', (_req, res) => res.json(controller.getWhatsAppStatus()));
 app.post('/api/whatsapp/start', async (req, res) => res.json({...await controller.startRuntime(req.body || {}), endpoint:'whatsapp/start'}));
+app.post('/api/whatsapp/pairing/reset', async (req, res) => { try { return res.json({...await controller.resetUnregisteredPairingSession(req.body?.phoneNumber), endpoint:'whatsapp/pairing/reset'}); } catch(error) { return res.status(400).json({status:'failed',error:error.message||'Reset pairing gagal'}); } });
 app.post('/api/whatsapp/stop', async (_req, res) => res.json({...await controller.stopRuntime(), endpoint:'whatsapp/stop', note:'Disconnect only; session preserved'}));
 
 app.post('/api/whatsapp/logout', async (_req, res) => {
@@ -69,25 +105,37 @@ app.post('/api/whatsapp/logout', async (_req, res) => {
 app.get('/api/bot/config', (_req, res) => res.json(getAutoReplyConfig()));
 app.get('/api/automation/config', (_req, res) => res.json(getAutomationConfig()));
 app.post('/api/automation/config', (req, res) => {
+  const previous = getAutomationConfig();
   try {
     const config = setAutomationConfig(req.body || {});
-    saveSetting('automationConfig', config);
-    res.json({status:'saved', config});
+    if (!saveSetting('automationConfig', config)) {
+      setAutomationConfig(previous);
+      return res.status(500).json({status:'failed', error:'Gagal menyimpan konfigurasi ke penyimpanan lokal. Periksa ruang penyimpanan dan izin aplikasi, lalu coba lagi.'});
+    }
+    return res.json({status:'saved', config});
   } catch (error) {
-    res.status(400).json({status:'failed', error:error.message || 'Automation config invalid'});
+    return res.status(400).json({status:'failed', error:error.message || 'Automation config invalid'});
   }
 });
 app.get('/api/automation/stats', (_req, res) => res.json(getAutomationStats()));
 app.post('/api/automation/stats/reset', (_req, res) => res.json({status:'reset', stats:resetAutomationStats()}));
 app.post('/api/automation/pause', (_req, res) => {
-  const config = setAutomationConfig({...getAutomationConfig(), paused:true});
-  saveSetting('automationConfig', config);
-  res.json({status:'paused', config});
+  const previous = getAutomationConfig();
+  const config = setAutomationConfig({...previous, paused:true});
+  if (!saveSetting('automationConfig', config)) {
+    setAutomationConfig(previous);
+    return res.status(500).json({status:'failed', error:'Gagal menyimpan konfigurasi ke penyimpanan lokal. Periksa ruang penyimpanan dan izin aplikasi, lalu coba lagi.'});
+  }
+  return res.json({status:'paused', config});
 });
 app.post('/api/automation/resume', (_req, res) => {
-  const config = setAutomationConfig({...getAutomationConfig(), paused:false});
-  saveSetting('automationConfig', config);
-  res.json({status:'resumed', config});
+  const previous = getAutomationConfig();
+  const config = setAutomationConfig({...previous, paused:false});
+  if (!saveSetting('automationConfig', config)) {
+    setAutomationConfig(previous);
+    return res.status(500).json({status:'failed', error:'Gagal menyimpan konfigurasi ke penyimpanan lokal. Periksa ruang penyimpanan dan izin aplikasi, lalu coba lagi.'});
+  }
+  return res.json({status:'resumed', config});
 });
 app.post('/api/bot/config', (req, res) => {
   const body = req.body || {};
@@ -98,26 +146,33 @@ app.post('/api/bot/config', (req, res) => {
   const reply = (body.reply || '').trim();
   if (trigger.length > 200 || reply.length > 2000) return res.status(400).json({error:'trigger max is 200 characters and reply max is 2000 characters'});
   if (body.enabled === true && !reply) return res.status(400).json({error:'reply is required when auto-reply is enabled'});
+  const previous = getAutoReplyConfig();
   const config = setAutoReplyConfig({enabled:body.enabled === true, trigger, reply});
-  saveSetting('botConfig', config);
-  res.json({status:'saved', config});
+  if (!saveSetting('botConfig', config)) {
+    setAutoReplyConfig(previous);
+    return res.status(500).json({status:'failed', error:'Gagal menyimpan konfigurasi ke penyimpanan lokal. Periksa ruang penyimpanan dan izin aplikasi, lalu coba lagi.'});
+  }
+  return res.json({status:'saved', config});
 });
 
 app.get('/api/ai/config', (_req, res) => {
   const config = getAIConfig();
-  const {apiKey, ...safe} = config;
-  res.json({...safe, hasApiKey:Boolean(apiKey)});
+  const {apiKey, fallbackApiKey, ...safe} = config;
+  res.json({...safe, hasApiKey:Boolean(apiKey), hasFallbackApiKey:Boolean(fallbackApiKey)});
 });
 app.post('/api/ai/config', (req, res) => {
   try {
     const body = req.body || {};
     const current = getAIConfig();
     const apiKey = typeof body.apiKey === 'string' && body.apiKey.trim() ? body.apiKey.trim() : current.apiKey;
-    const config = normalizeAIConfig({...current, ...body, apiKey, hasApiKey:Boolean(apiKey)});
+    const fallbackApiKey = typeof body.fallbackApiKey === 'string' && body.fallbackApiKey.trim() ? body.fallbackApiKey.trim() : current.fallbackApiKey;
+    const config = normalizeAIConfig({...current, ...body, apiKey, fallbackApiKey, hasApiKey:Boolean(apiKey)});
+    if (!saveSetting('aiConfig', config)) {
+      return res.status(500).json({status:'failed', error:'Gagal menyimpan konfigurasi ke penyimpanan lokal. Periksa ruang penyimpanan dan izin aplikasi, lalu coba lagi.'});
+    }
     setAIConfig(config);
-    saveSetting('aiConfig', config);
-    const {apiKey:secret, ...safe} = config;
-    res.json({status:'saved', ...safe, hasApiKey:Boolean(secret)});
+    const {apiKey:secret, fallbackApiKey:fallbackSecret, ...safe} = config;
+    return res.json({status:'saved', ...safe, hasApiKey:Boolean(secret), hasFallbackApiKey:Boolean(fallbackSecret)});
   } catch (error) { res.status(400).json({status:'failed', error:error.message || 'AI config invalid'}); }
 });
 app.post('/api/ai/test', async (req, res) => {
@@ -148,13 +203,22 @@ app.post('/api/message/send', async (req, res) => {
     const result = await sendText(jid.trim(), text);
     res.json({status:'sent', jid:jid.trim(), messageId:result?.key?.id || null});
   } catch (error) {
-    res.status(500).json({error:error.message || 'Message send failed'});
+    if (/Not connected to WhatsApp/i.test(error?.message || '')) {
+      return res.status(409).json({error:'WhatsApp belum terhubung. Hubungkan perangkat WhatsApp terlebih dahulu, lalu kirim ulang.'});
+    }
+    return res.status(500).json({error:'Pesan gagal dikirim. Periksa koneksi WhatsApp dan coba lagi.'});
   }
 });
 
 app.use((error, req, res, _next) => {
-  console.error('[SKYWA ERROR]', error.message);
-  res.status(500).json({error:error.message || 'Internal server error', endpoint:req.path || 'unknown'});
+  if (error?.type === 'entity.parse.failed') {
+    return res.status(400).json({status:'failed', error:'JSON body tidak valid. Periksa format JSON lalu coba lagi.'});
+  }
+  if (error?.type === 'entity.too.large') {
+    return res.status(413).json({status:'failed', error:'Ukuran request terlalu besar.'});
+  }
+  console.error('[SKYWA ERROR]', error?.name || 'Error');
+  return res.status(500).json({error:'Terjadi kesalahan internal. Periksa pengaturan lalu coba lagi.', endpoint:req.path || 'unknown'});
 });
 
 initDB();
@@ -193,6 +257,14 @@ async function resumeSavedWhatsAppSession() {
   }
 }
 
+server.on('error', (error) => {
+  if (error && error.code === 'EADDRINUSE') {
+    console.error('[SKYWA] EADDRINUSE: loopback port ' + PORT + ' is already in use. Stop the other local server before starting SKYWA.');
+  } else {
+    console.error('[SKYWA] HTTP server failed:', error && error.code ? error.code : 'UNKNOWN');
+  }
+  // Avoid an unhandled EventEmitter error that would terminate Node without a useful diagnostic.
+});
 server.listen(PORT, BIND, () => {
   console.log('[SKYWA] Server started on ' + BIND + ':' + PORT);
   // Run only after the local API is accepting requests. A fresh install has

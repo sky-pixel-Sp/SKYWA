@@ -2,6 +2,7 @@ import {describe, test, beforeEach} from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalizeAutomationConfig, findAutomationRule, checkAutomationAllowed,
+  reserveAutomationReply, releaseAutomationReservation, isHelpOrResetCommand,
   recordAutomationReply, resetAutomationGuardState, isWithinActiveHours,
   recordAutomationEvent, getAutomationStats, resetAutomationStats
 } from '../../packages/whatsapp-engine/src/automation.js';
@@ -64,6 +65,35 @@ describe('SKYWA Automation Pro', () => {
     recordAutomationReply(jid2, 112000);
     assert.equal(checkAutomationAllowed(config, '628333333333@s.whatsapp.net', 113000).reason, 'global-rate-limit');
     assert.equal(checkAutomationAllowed(config, '628333333333@s.whatsapp.net', 172000).allowed, true);
+  });
+
+  test('help and reset commands are identified for the same safety gate', () => {
+    for (const command of ['/help', '/start', '/reset']) assert.equal(isHelpOrResetCommand(command), true);
+    assert.equal(isHelpOrResetCommand('/anything-else'), false);
+    const config = normalizeAutomationConfig({paused:true});
+    assert.equal(reserveAutomationReply(config, '628111111111@s.whatsapp.net').reason, 'paused');
+    assert.equal(reserveAutomationReply({...config, paused:false, blocklist:['628111111111']}, '628111111111@s.whatsapp.net').reason, 'blocked-chat');
+    assert.equal(reserveAutomationReply({...config, paused:false}, '120363@g.us').reason, 'group-ignored');
+  });
+
+  test('reserves cooldown and rate-limit capacity before async reply completes', () => {
+    const config = normalizeAutomationConfig({ignoreGroups:false, cooldownSeconds:10, maxRepliesPerMinute:1});
+    const jid = '628111111111@s.whatsapp.net';
+    const first = reserveAutomationReply(config, jid, 100000);
+    assert.equal(first.allowed, true);
+    assert.equal(checkAutomationAllowed(config, jid, 100001).reason, 'chat-cooldown');
+    assert.equal(checkAutomationAllowed(config, '628222222222@s.whatsapp.net', 100001).reason, 'global-rate-limit');
+    assert.equal(releaseAutomationReservation(first.token), true);
+    assert.equal(checkAutomationAllowed(config, jid, 100002).allowed, true);
+  });
+
+  test('failed reply reservation can be released without burning cooldown', () => {
+    const config = normalizeAutomationConfig({ignoreGroups:false, cooldownSeconds:10});
+    const jid = '628111111111@s.whatsapp.net';
+    const reservation = reserveAutomationReply(config, jid, 200000);
+    assert.equal(reservation.allowed, true);
+    assert.equal(releaseAutomationReservation(reservation.token), true);
+    assert.equal(reserveAutomationReply(config, jid, 200001).allowed, true);
   });
 
   test('records runtime automation metrics', () => {

@@ -105,11 +105,20 @@ rm -rf \
   "$APP_ASSETS/node_modules/@img/sharp-linuxmusl-arm64" \
   "$APP_ASSETS/node_modules/@img/sharp-libvips-linuxmusl-arm64"
 
-# Stamp the source revision into the installed bundle. Runtime assets are cached
-# in app-private storage, so versionCode alone is not enough after hotfix builds.
+# Stamp source and Android version metadata into the embedded bundle.
+# Gradle remains the single source of truth for the installed app version.
 BUNDLE_VERSION="$(git rev-parse HEAD)"
-printf '%s\n' "$BUNDLE_VERSION" > "$APP_ASSETS/.skywa-bundle-version"
+APP_VERSION_NAME="$(sed -nE 's/^[[:space:]]*versionName[[:space:]]+"([^"]+)".*/\1/p' app/build.gradle | head -n1)"
+APP_VERSION_CODE="$(sed -nE 's/^[[:space:]]*versionCode[[:space:]]+([0-9]+).*/\1/p' app/build.gradle | head -n1)"
+if [[ -z "$APP_VERSION_NAME" || ! "$APP_VERSION_CODE" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: could not read versionName/versionCode from app/build.gradle." >&2
+  exit 1
+fi
+printf '%s\n' "$BUNDLE_VERSION" > "$APP_ASSETS/skywa-bundle-version.txt"
+printf '%s\n' "$APP_VERSION_NAME" > "$APP_ASSETS/skywa-app-version.txt"
+printf '%s\n' "$APP_VERSION_CODE" > "$APP_ASSETS/skywa-app-version-code.txt"
 
+echo "Android app version: $APP_VERSION_NAME ($APP_VERSION_CODE)"
 echo "Embedded Node.js runtime: ${RUNTIME_VERSION} (SHA-256 verified)"
 echo "Runtime library: ${APP_LIBNODE}/bin/arm64-v8a/libnode.so"
 echo "Production engine bundle: ${APP_ASSETS}"

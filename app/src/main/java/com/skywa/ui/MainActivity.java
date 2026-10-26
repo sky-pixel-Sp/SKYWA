@@ -26,10 +26,6 @@ import com.skywa.runtime.NodeService;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -57,8 +53,9 @@ public class MainActivity extends Activity {
     private LinearLayout whatsappSection;
     private LinearLayout automationSection;
     private LinearLayout aiSection;
+    private LinearLayout settingsSection;
     private LinearLayout bottomNavigation;
-    private final Button[] navigationButtons = new Button[4];
+    private final Button[] navigationButtons = new Button[5];
     private Button serverToggleButton;
     private TextView homeWhatsAppStatus;
     private TextView buildInfoStatus;
@@ -70,6 +67,8 @@ public class MainActivity extends Activity {
     private TextView controllerStatus;
     private TextView whatsappStatus;
     private TextView pairingInfo;
+    private TextView pairingHistoryInfo;
+    private String lastWhatsAppDiagnostic = "Belum ada riwayat koneksi WhatsApp.";
     private TextView actionStatus;
     private EditText phoneInput;
     private EditText recipientInput;
@@ -122,10 +121,12 @@ public class MainActivity extends Activity {
         whatsappSection = createSection();
         automationSection = createSection();
         aiSection = createSection();
+        settingsSection = createSection();
         page.addView(homeSection, new LinearLayout.LayoutParams(-1, -2));
         page.addView(whatsappSection, new LinearLayout.LayoutParams(-1, -2));
         page.addView(automationSection, new LinearLayout.LayoutParams(-1, -2));
         page.addView(aiSection, new LinearLayout.LayoutParams(-1, -2));
+        page.addView(settingsSection, new LinearLayout.LayoutParams(-1, -2));
         activeSection = homeSection;
 
         bottomNavigation = createBottomNavigation();
@@ -152,6 +153,8 @@ public class MainActivity extends Activity {
         serverToggleButton = addButton(statusCard, "NYALAKAN SERVER", ACCENT, this::toggleEmbeddedServer);
         addButton(statusCard, "PERIKSA STATUS", 0xFF293954, this::refreshStatus);
         buildInfoStatus = addText(statusCard, "Versi runtime: memeriksa…", 11, MUTED, false);
+        addButton(statusCard, "DIAGNOSTIK RUNTIME", 0xFF34425C, this::showRuntimeDiagnostics);
+        addButton(statusCard, "SALIN LAPORAN DIAGNOSTIK", 0xFF34425C, this::copyRuntimeDiagnostics);
         homeWhatsAppStatus = addText(activeSection, "WhatsApp • memeriksa status…", 14, WHITE, true);
 
         addText(activeSection, "Urutan mudah: 1) Nyalakan server  2) Hubungkan WhatsApp  3) Atur AI atau balasan.", 12, MUTED, false);
@@ -162,11 +165,14 @@ public class MainActivity extends Activity {
         addText(activeSection, "Hubungkan akun WhatsApp kamu dan uji pesan di sini.", 13, MUTED, false);
         LinearLayout connectCard = addCard("STATUS & PAIRING");
         whatsappStatus = addText(connectCard, "WhatsApp: belum diperiksa", 15, WHITE, true);
-        pairingInfo = addText(connectCard, "Kode pairing akan muncul setelah kamu meminta pairing.", 13, MUTED, false);
+        pairingInfo = addText(connectCard, "Menyiapkan koneksi…", 20, WHITE, true);
         addText(connectCard, "Masukkan nomor dalam format internasional tanpa tanda +. Contoh Indonesia: 6281234567890.", 13, MUTED, false);
         phoneInput = addInput(connectCard, "Nomor WhatsApp (contoh 62812…)", false);
         phoneInput.setInputType(3);
         addButton(connectCard, "MINTA KODE PAIRING", ACCENT, this::startWhatsApp);
+        addButton(connectCard, "SALIN KODE", 0xFF34425C, this::copyPairingCode);
+        addButton(connectCard, "ATUR ULANG SESI PAIRING", 0xFF7D3440, this::confirmResetPairingSession);
+        pairingHistoryInfo = addText(connectCard, "Riwayat koneksi akan muncul di sini.", 11, MUTED, false);
         addText(connectCard, "Di WhatsApp, buka Perangkat tertaut → Tautkan perangkat → Tautkan dengan nomor telepon, lalu masukkan kode yang tampil.", 12, MUTED, false);
         addButton(connectCard, "HENTIKAN KONEKSI (SESI TETAP DISIMPAN)", 0xFF34425C, this::stopWhatsApp);
 
@@ -221,6 +227,18 @@ public class MainActivity extends Activity {
         addText(infoCard, "Server Node.js, mesin WhatsApp, dan dependensinya disertakan dalam APK. SKYWA menyiapkan runtime di penyimpanan privat aplikasi dan mengelolanya lewat layanan latar depan Android. Tidak perlu browser, Termux, atau menjalankan perintah secara manual.", 13, MUTED, false);
         addText(infoCard, "Endpoint internal: 127.0.0.1:3000 • hanya untuk komunikasi aplikasi lokal.", 12, MUTED, false);
 
+        activeSection = settingsSection;
+        addText(activeSection, "PENGATURAN", 27, WHITE, true);
+        addText(activeSection, "Kelola preferensi, keamanan, dan konfigurasi lanjutan SKYWA.", 13, MUTED, false);
+        LinearLayout preferencesCard = addCard("PRIVASI & KEAMANAN");
+        addText(preferencesCard, "API lokal hanya menerima request dengan token per-instalasi yang disimpan di penyimpanan privat aplikasi. Jangan membagikan log diagnostik yang berisi informasi akun atau sesi.", 13, MUTED, false);
+        addText(preferencesCard, "Jika AI diaktifkan, isi pesan WhatsApp dan konteks percakapan dapat dikirim ke provider AI yang dipilih. Gunakan AI hanya untuk chat yang sesuai dan periksa kebijakan privasi provider.", 13, MUTED, false);
+        addButton(preferencesCard, "BUKA PENGATURAN AI", ACCENT, () -> startActivity(new Intent(this, AISettingsActivity.class)));
+        LinearLayout setupCard = addCard("BANTUAN & SETUP");
+        addText(setupCard, "Atur langkah awal: nyalakan server, hubungkan WhatsApp, kirim pesan uji, siapkan satu aturan balasan, lalu konfigurasikan AI jika diperlukan.", 13, MUTED, false);
+        addButton(setupCard, "BUKA PANDUAN SETUP", GREEN, this::showSetupGuide);
+        addText(setupCard, "Aplikasi menargetkan perangkat Android ARM64. Pairing, pengiriman pesan nyata, serta kestabilan background tetap perlu diuji di perangkat yang digunakan.", 12, MUTED, false);
+
         actionStatus = addText(appRoot, "Menyiapkan SKYWA…", 12, MUTED, false);
         actionStatus.setPadding(dp(12), dp(9), dp(12), dp(9));
         actionStatus.setBackground(rounded(PANEL, BORDER, 12));
@@ -259,13 +277,13 @@ public class MainActivity extends Activity {
         bar.setPadding(dp(8), dp(6), dp(8), dp(8));
         bar.setGravity(Gravity.CENTER);
         bar.setBackground(rounded(PANEL, BORDER, 18));
-        String[] labels = {"⌂\nBeranda", "◉\nWhatsApp", "↻\nOtomasi", "✦\nAI"};
-        String[] keys = {"home", "whatsapp", "automation", "ai"};
+        String[] labels = {"⌂\nBeranda", "◉\nWhatsApp", "↻\nOtomasi", "✦\nAI", "⚙\nPengaturan"};
+        String[] keys = {"home", "whatsapp", "automation", "ai", "settings"};
         for (int i = 0; i < labels.length; i++) {
             final String key = keys[i];
             Button button = new Button(this);
             button.setText(labels[i]);
-            button.setTextSize(11);
+            button.setTextSize(10);
             button.setAllCaps(false);
             button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
             button.setMinHeight(dp(52));
@@ -285,7 +303,8 @@ public class MainActivity extends Activity {
         if (whatsappSection != null) whatsappSection.setVisibility("whatsapp".equals(tab) ? View.VISIBLE : View.GONE);
         if (automationSection != null) automationSection.setVisibility("automation".equals(tab) ? View.VISIBLE : View.GONE);
         if (aiSection != null) aiSection.setVisibility("ai".equals(tab) ? View.VISIBLE : View.GONE);
-        int active = "home".equals(tab) ? 0 : "whatsapp".equals(tab) ? 1 : "automation".equals(tab) ? 2 : 3;
+        if (settingsSection != null) settingsSection.setVisibility("settings".equals(tab) ? View.VISIBLE : View.GONE);
+        int active = "home".equals(tab) ? 0 : "whatsapp".equals(tab) ? 1 : "automation".equals(tab) ? 2 : "ai".equals(tab) ? 3 : 4;
         for (int i = 0; i < navigationButtons.length; i++) {
             Button button = navigationButtons[i];
             if (button == null) continue;
@@ -296,41 +315,73 @@ public class MainActivity extends Activity {
     }
 
     private void showSetupGuide() {
-        final String[] steps = {
-            "1. Nyalakan Server",
-            "2. Hubungkan WhatsApp",
-            "3. Pasang balasan otomatis",
-            "4. Atur AI (opsional)"
+        showSetupGuideStep(0);
+    }
+
+    private void showSetupGuideStep(int step) {
+        final String[] titles = {
+            "Nyalakan Server",
+            "Hubungkan WhatsApp",
+            "Kirim pesan uji",
+            "Aktifkan satu aturan auto-reply",
+            "Konfigurasi AI (opsional)"
         };
-        new AlertDialog.Builder(this)
-            .setTitle("Panduan cepat SKYWA")
-            .setMessage("Ikuti urutan ini. Kamu tidak perlu mengatur semuanya sekaligus.\n\nServer harus aktif sebelum pairing, menyimpan otomasi, atau menguji AI.")
-            .setItems(steps, (dialog, which) -> {
-                if (which == 0) {
-                    showTab("home");
-                    if (!runtimeOnline) startEmbeddedServer();
-                    else {
-                        actionStatus.setText("Server sudah aktif. Langkah berikutnya: hubungkan WhatsApp.");
-                        actionStatus.setTextColor(GREEN);
-                        showSetupGuide();
-                    }
-                } else if (which == 1) {
-                    showTab("whatsapp");
-                    actionStatus.setText("Masukkan nomor WhatsApp lalu tekan Minta Kode Pairing.");
-                    actionStatus.setTextColor(MUTED);
-                } else if (which == 2) {
-                    showTab("automation");
-                    applyStarterPreset();
-                } else {
-                    showTab("ai");
-                    startActivity(new Intent(this, AISettingsActivity.class));
+        final String[] messages = {
+            "Nyalakan runtime lokal SKYWA dahulu. Server perlu aktif sebelum pairing, menyimpan aturan, atau menguji AI.",
+            "Masukkan nomor WhatsApp dalam format internasional tanpa tanda +, lalu minta kode pairing dan selesaikan langkah Perangkat tertaut di aplikasi WhatsApp.",
+            "Setelah status WhatsApp terhubung, periksa nomor tujuan dan teks pesan pada kartu Kirim Pesan. Tekan tombol Kirim Pesan sendiri untuk menguji pengiriman nyata.",
+            "Pilih satu paket contoh, periksa balasannya, lalu tekan Simpan Auto-reply dan Simpan Automation Pro. Aturan tidak dikirim ke server sampai kamu menekan tombol simpan.",
+            "AI bersifat opsional. Jika diaktifkan, isi pesan WhatsApp dan sebagian konteks percakapan dapat dikirim ke provider AI yang dipilih. Uji provider sebelum mengaktifkan balasan AI."
+        };
+        if (step < 0 || step >= titles.length) return;
+        AlertDialog.Builder dialog = new AlertDialog.Builder(this)
+            .setTitle("Setup " + (step + 1) + "/5 • " + titles[step])
+            .setMessage(messages[step])
+            .setNegativeButton("NANTI", (d, which) -> d.dismiss());
+        String action = step == 3 ? "PILIH PAKET" : step == 4 ? "BUKA AI (OPSIONAL)" : "LANJUT";
+        dialog.setPositiveButton(action, (d, which) -> {
+            if (step == 0) {
+                showTab("home");
+                if (!runtimeOnline) startEmbeddedServer();
+                else {
+                    actionStatus.setText("Server sudah aktif.");
+                    actionStatus.setTextColor(GREEN);
                 }
-            })
-            .setNegativeButton("NANTI", (dialog, which) -> dialog.dismiss())
-            .show();
+                showSetupGuideStep(1);
+            } else if (step == 1) {
+                showTab("whatsapp");
+                actionStatus.setText("Selesaikan pairing WhatsApp di layar ini sebelum mengirim pesan uji.");
+                actionStatus.setTextColor(MUTED);
+                showSetupGuideStep(2);
+            } else if (step == 2) {
+                showTab("whatsapp");
+                if (recipientInput != null && recipientInput.getText().toString().trim().isEmpty() && phoneInput != null) {
+                    recipientInput.setText(phoneInput.getText().toString().trim());
+                }
+                if (messageInput != null && messageInput.getText().toString().trim().isEmpty()) {
+                    messageInput.setText("Tes pesan SKYWA. Mohon abaikan.");
+                }
+                actionStatus.setText("Kirim pesan uji secara manual, pastikan hasilnya benar, lalu lanjutkan ke aturan auto-reply.");
+                actionStatus.setTextColor(MUTED);
+                showSetupGuideStep(3);
+            } else if (step == 3) {
+                showTab("automation");
+                applyStarterPreset(true);
+            } else {
+                showTab("ai");
+                actionStatus.setText("AI opsional. Konfirmasikan provider, endpoint, dan privasi sebelum menyimpan.");
+                actionStatus.setTextColor(MUTED);
+                startActivity(new Intent(this, AISettingsActivity.class));
+            }
+        });
+        dialog.show();
     }
 
     private void applyStarterPreset() {
+        applyStarterPreset(false);
+    }
+
+    private void applyStarterPreset(boolean advanceSetup) {
         final String[] presets = {
             "Toko online",
             "Customer service",
@@ -363,6 +414,7 @@ public class MainActivity extends Activity {
                 showTab("automation");
                 actionStatus.setText("Paket " + presets[which] + " diisi. Periksa aturan, lalu tekan Simpan Automation Pro dan Simpan Auto-reply.");
                 actionStatus.setTextColor(GREEN);
+                if (advanceSetup) showSetupGuideStep(4);
             })
             .setNegativeButton("BATAL", (dialog, which) -> dialog.dismiss())
             .show();
@@ -394,7 +446,7 @@ public class MainActivity extends Activity {
                 actionStatus.setTextColor(RED);
                 refreshStatus();
             }
-        }, 15000);
+        }, 60000);
     }
 
     private void stopEmbeddedServer() {
@@ -446,6 +498,47 @@ public class MainActivity extends Activity {
             serverToggleButton.setText("NYALAKAN SERVER");
             serverToggleButton.setEnabled(true);
             serverToggleButton.setBackground(rounded(ACCENT, ACCENT, 11));
+        }
+    }
+
+    private String readRuntimeDiagnostic() {
+        StringBuilder report = new StringBuilder();
+        try (java.io.InputStream input = openFileInput("skywa-runtime-error.txt");
+             java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
+            byte[] buffer = new byte[2048];
+            int count;
+            while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+            report.append(output.toString(StandardCharsets.UTF_8.name()));
+        } catch (Exception ignored) {
+            report.append("Belum ada detail error yang tersimpan. Runtime mungkin masih menyalin bundle atau keluar tanpa exception Java.");
+        }
+        // Keep diagnostic exports safe: redact likely tokens, API keys and phone numbers.
+        String safe = report.toString()
+                .replaceAll("(?i)(x-skywa-token\\s*[:=]\\s*)[^\\s,;]+", "$1[REDACTED]")
+                .replaceAll("(?i)(api[_ -]?key\\s*[:=]\\s*)[^\\s,;]+", "$1[REDACTED]")
+                .replaceAll("(?<![A-Za-z0-9])(?:\\+?\\d[\\d -]{8,16}\\d)(?![A-Za-z0-9])", "[PHONE REDACTED]");
+        return "SKYWA Runtime Diagnostics\n"
+                + "App version: " + com.skywa.BuildConfig.VERSION_NAME + " (" + com.skywa.BuildConfig.VERSION_CODE + ")\n"
+                + "API port: 127.0.0.1:3000\n"
+                + "State: " + (runtimeOnline ? "ACTIVE" : serverTransition.isEmpty() ? "NOT CONFIRMED" : serverTransition) + "\n\n"
+                + safe;
+    }
+
+    private void showRuntimeDiagnostics() {
+        new AlertDialog.Builder(this)
+                .setTitle("Diagnostik Runtime")
+                .setMessage(readRuntimeDiagnostic())
+                .setPositiveButton("TUTUP", (dialog, which) -> dialog.dismiss())
+                .setNeutralButton("SALIN LAPORAN", (dialog, which) -> copyRuntimeDiagnostics())
+                .show();
+    }
+
+    private void copyRuntimeDiagnostics() {
+        android.content.ClipboardManager clipboard = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (clipboard != null) {
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("SKYWA Runtime Diagnostics", readRuntimeDiagnostic()));
+            actionStatus.setText("Laporan diagnostik disalin dengan data sensitif disamarkan.");
+            actionStatus.setTextColor(GREEN);
         }
     }
 
@@ -605,6 +698,7 @@ public class MainActivity extends Activity {
             return;
         }
         String phone = digits(phoneInput.getText().toString());
+        if (phone.startsWith("08")) phone = "62" + phone.substring(1);
         if (phone.length() < 10 || phone.length() > 15) {
             actionStatus.setText("Masukkan nomor internasional yang valid, misalnya 6281234567890.");
             actionStatus.setTextColor(RED);
@@ -619,7 +713,67 @@ public class MainActivity extends Activity {
             return;
         }
         actionStatus.setTextColor(MUTED);
-        performAction("POST", "/api/whatsapp/start", body, "Meminta kode pairing");
+        pairingInfo.setText("Menyiapkan koneksi…");
+        performAction("POST", "/api/whatsapp/start", body, "Permintaan dikirim, menunggu kode");
+    }
+
+
+    private String pairingStageLabel(String stage) {
+        switch (stage) {
+            case "menunggu-socket": return "Menunggu koneksi";
+            case "menunggu-kode": return "Meminta kode";
+            case "kode-siap": return "Kode siap";
+            case "menunggu-konfirmasi": return "Menunggu konfirmasi di WhatsApp";
+            case "menyelesaikan-penautan": return "Menyelesaikan penautan";
+            case "terhubung": return "Terhubung";
+            case "gagal": return "Pairing gagal";
+            default: return "Belum dimulai";
+        }
+    }
+
+    private String summarizePairingHistory(org.json.JSONArray history) {
+        if (history == null || history.length() == 0) return "Belum ada peristiwa";
+        StringBuilder summary = new StringBuilder();
+        int start = Math.max(0, history.length() - 3);
+        for (int i = start; i < history.length(); i++) {
+            JSONObject item = history.optJSONObject(i);
+            if (item == null) continue;
+            if (summary.length() > 0) summary.append(" • ");
+            summary.append(item.optString("event", "peristiwa").replaceAll("[^a-zA-Z0-9_-]", ""));
+        }
+        return summary.length() == 0 ? "Belum ada peristiwa" : summary.toString();
+    }
+
+    private void copyPairingCode() {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("[A-Z0-9]{4}-[A-Z0-9]{4}").matcher(pairingInfo.getText().toString());
+        if (!matcher.find()) {
+            actionStatus.setText("Kode belum tersedia. Tunggu hingga kode pairing muncul.");
+            actionStatus.setTextColor(MUTED);
+            return;
+        }
+        android.content.ClipboardManager clipboard = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (clipboard != null) clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Kode pairing SKYWA", matcher.group()));
+        actionStatus.setText("Kode pairing disalin.");
+        actionStatus.setTextColor(GREEN);
+    }
+
+    private void confirmResetPairingSession() {
+        new AlertDialog.Builder(this).setTitle("Atur ulang sesi pairing?")
+            .setMessage("Sesi belum terdaftar akan diarsipkan. Sesi yang sudah terdaftar tidak akan disentuh.")
+            .setNegativeButton("BATAL", (dialog, which) -> dialog.dismiss())
+            .setPositiveButton("ATUR ULANG", (dialog, which) -> {
+                JSONObject body = new JSONObject();
+                try {
+                    String phone = digits(phoneInput.getText().toString());
+                    if (phone.startsWith("08")) phone = "62" + phone.substring(1);
+                    body.put("phoneNumber", phone);
+                } catch (JSONException error) {
+                    actionStatus.setText("Nomor pairing tidak valid.");
+                    return;
+                }
+                performAction("POST", "/api/whatsapp/pairing/reset", body, "Mengatur ulang sesi pairing");
+            })
+            .show();
     }
 
     private void stopWhatsApp() {
@@ -930,14 +1084,24 @@ public class MainActivity extends Activity {
                         } else {
                             boolean connected = finalWhatsapp.optBoolean("connected", false);
                             String state = finalWhatsapp.optString("state", "unknown");
-                            whatsappStatus.setText("WhatsApp: " + (connected ? "TERHUBUNG" : state));
+                            whatsappStatus.setText("WhatsApp: " + (connected ? "Terhubung" : state));
                             whatsappStatus.setTextColor(connected ? GREEN : WHITE);
                             homeWhatsAppStatus.setText("WhatsApp • " + (connected ? "TERHUBUNG" : "BELUM TERHUBUNG"));
                             homeWhatsAppStatus.setTextColor(connected ? GREEN : MUTED);
+                            String diagnosticState = finalWhatsapp.optString("state", "unknown");
+                            String diagnosticStage = finalWhatsapp.optString("pairingStage", "idle");
+                            lastWhatsAppDiagnostic = "state=" + diagnosticState + ", stage=" + diagnosticStage + ", connected=" + connected + ", lastDisconnect=" + finalWhatsapp.optJSONObject("lastDisconnect");
+                            String stage = finalWhatsapp.optString("pairingStage", "idle");
+                            String stageLabel = pairingStageLabel(stage);
+                            long expiresAt = finalWhatsapp.optLong("pairingExpiresAt", 0L);
+                            String countdown = expiresAt > System.currentTimeMillis() ? " • perkiraan sisa " + Math.max(0, (expiresAt - System.currentTimeMillis()) / 1000) + " dtk" : "";
+                            pairingInfo.setTextSize(20);
+                            pairingHistoryInfo.setText("Tahap: " + stageLabel + countdown + "\\nRiwayat: " + summarizePairingHistory(finalWhatsapp.optJSONArray("history")));
                             String code = finalWhatsapp.optString("pairing", "");
                             String qr = finalWhatsapp.optString("qr", "");
                             if (!code.isEmpty()) {
-                                pairingInfo.setText("KODE PAIRING: " + code + "\nMasukkan kode tersebut di WhatsApp pada menu Perangkat tertaut.");
+                                pairingInfo.setTextSize(24);
+                                pairingInfo.setText("KODE PAIRING\n" + code + "\nWhatsApp → Perangkat tertaut → Tautkan perangkat → Tautkan dengan nomor telepon.");
                                 pairingInfo.setTextColor(GREEN);
                             } else if (!qr.isEmpty()) {
                                 pairingInfo.setText("QR pairing tersedia di backend. Untuk kode yang mudah dipakai di ponsel ini, masukkan nomor di atas lalu pilih Minta Kode Pairing.");
@@ -988,58 +1152,7 @@ public class MainActivity extends Activity {
     }
 
     private JSONObject apiRequest(String method, String path, JSONObject body) throws Exception {
-        HttpURLConnection connection = null;
-        try {
-            connection = (HttpURLConnection) new URL(API_BASE + path).openConnection();
-            connection.setRequestMethod(method);
-            connection.setConnectTimeout(4000);
-            connection.setReadTimeout(15000);
-            connection.setRequestProperty("Accept", "application/json");
-            if (body != null) {
-                connection.setDoOutput(true);
-                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-                byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
-                try (OutputStream output = connection.getOutputStream()) {
-                    output.write(payload);
-                }
-            }
-            int status = connection.getResponseCode();
-            InputStream stream = status >= 200 && status < 400 ? connection.getInputStream() : connection.getErrorStream();
-            String raw = stream == null ? "" : readString(stream);
-            if (status < 200 || status >= 300) {
-                String detail = "";
-                try {
-                    JSONObject errorJson = new JSONObject(raw);
-                    detail = errorJson.optString("error", errorJson.optString("message", ""));
-                } catch (JSONException ignored) {
-                    // Express 404 pages are HTML, not machine-readable API errors.
-                }
-                if (detail.isEmpty()) {
-                    if (status == 404 || raw.toLowerCase(java.util.Locale.ROOT).contains("<!doctype html")) {
-                        detail = "API runtime tidak cocok atau masih memakai bundle lama. Pasang APK terbaru, lalu Paksa berhenti SKYWA dan buka kembali agar bundle diperbarui.";
-                    } else {
-                        detail = "Server lokal mengembalikan HTTP " + status + ".";
-                    }
-                }
-                throw new IOException("HTTP " + status + ": " + detail);
-            }
-            try {
-                return raw.isEmpty() ? new JSONObject() : new JSONObject(raw);
-            } catch (JSONException parseError) {
-                throw new IOException("Respons runtime bukan JSON. Coba Paksa berhenti SKYWA, buka ulang, lalu refresh status.");
-            }
-        } finally {
-            if (connection != null) connection.disconnect();
-        }
-    }
-
-    private String readString(InputStream input) throws IOException {
-        try (InputStream stream = input; ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-            byte[] buffer = new byte[4096];
-            int count;
-            while ((count = stream.read(buffer)) != -1) output.write(buffer, 0, count);
-            return output.toString(StandardCharsets.UTF_8.name());
-        }
+        return com.skywa.runtime.LocalApiClient.request(this, method, path, body);
     }
 
     private String safeMessage(Exception error) {

@@ -1,17 +1,24 @@
-# SKYWA Android: crash recovery and AI providers
+# SKYWA AI providers and fallback
 
-## AI modes
-- **OpenRouter**: enter an OpenRouter API key and a model ID such as `openai/gpt-4o-mini`. The key is stored only in the app-private runtime database and is never returned by the settings API.
-- **Local endpoint**: enter an OpenAI-compatible local server URL, for example `http://127.0.0.1:11434/v1`, and a model name served by it. This mode sends requests to that endpoint, not to OpenRouter. It is genuinely offline only when the local model server and model weights are already running/available on the device. This APK does not bundle multi-gigabyte model weights.
-- AI auto-reply is opt-in. It only handles incoming text when enabled; the test action sends a prompt to the provider but never sends a WhatsApp message.
-- Use a dedicated low-cost model, set a clear system prompt, and avoid enabling replies in sensitive group chats without testing.
+## Supported providers
 
-## Troubleshooting a launch crash
-1. Uninstall the older SKYWA preview before installing a new APK if Android reports a package/signature conflict.
-2. Reboot once after installation if the embedded native runtime failed to initialize.
-3. If it still closes immediately, collect the Android crash report from Settings > Apps > SKYWA > App details or capture `adb logcat` filtered by `AndroidRuntime`, `SKYWA-NodeService`, and `libnode`. A Java exception and a native SIGSEGV have different root causes; don't guess based on the UI alone.
-4. CI can verify compilation and APK contents but cannot prove startup stability on a physical phone.
+- **OpenRouter** — OpenAI-compatible chat completions endpoint. Configure a model ID and OpenRouter API key.
+- **Google Gemini** — Gemini `generateContent` API. Configure a Gemini API key and a model ID such as `gemini-2.5-flash`.
+- **Local endpoint** — an OpenAI-compatible server such as Ollama at `http://127.0.0.1:11434/v1`. The model must already be downloaded and running; SKYWA does not bundle local model weights.
 
+## Automatic fallback
 
-## v1.5.0 runtime toggle
-The local server toggle uses an Android service action to request an explicit stop. The service tears down its wake lock and terminates the isolated runtime process because native Node `node::Start` blocks its runtime thread and `stopSelf` alone does not end that native event loop. The app stores the requested server state separately so ordinary status refreshes do not unexpectedly restart a user-stopped server.
+Enable fallback and select a provider different from the primary provider. If the primary request fails or returns no usable text, SKYWA attempts the fallback provider once. The fallback has its own model and API key. If both fail, the returned error includes bounded primary and fallback diagnostics. Fallback is disabled by default.
+
+For a local fallback, SKYWA uses the configured local endpoint and the fallback model name. Cloud credentials are not added to local endpoint request headers. Gemini credentials are sent in the `x-goog-api-key` header, not the URL.
+
+## Privacy and credentials
+
+- AI is opt-in. When AI replies are enabled, incoming WhatsApp text and a limited conversation history may be sent to the configured provider.
+- The AI settings endpoint never returns either stored API key; it returns boolean `hasApiKey` and `hasFallbackApiKey` indicators.
+- API keys are currently stored in the app's local settings database. They are not encrypted at rest by the AI module itself; Android Keystore-backed encryption remains a production hardening requirement.
+- Do not expose the local API server to public networks. The standalone runtime authenticates local API requests with an installation-specific token.
+
+## Testing
+
+The provider tests mock network responses and verify request formatting, response parsing, credential isolation, fallback activation, and combined failure behavior. These tests do not prove that a live API key is valid or that a live provider is reachable. Real WhatsApp pairing, delivery, and background stability require physical-device tests.

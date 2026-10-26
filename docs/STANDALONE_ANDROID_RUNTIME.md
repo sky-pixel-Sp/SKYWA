@@ -71,3 +71,17 @@ Source integration has been added, but it is **not yet evidence that the final p
 - Behavior when notification permission is denied and when the phone's OEM battery restrictions are enabled.
 
 A green JavaScript unit test or successful Gradle build does not prove live WhatsApp pairing, message delivery, or long-running background reliability.
+
+## Local API authentication (v1.7 hardening)
+
+The Android service generates a 256-bit random token on first startup and stores it in app-private files. The native bridge passes it into the embedded Node.js process as `SKYWA_API_TOKEN`. The Android UI obtains the same token from private storage and sends it with `X-Skywa-Token`. The backend middleware protects every `/api/*` route except the minimal `/api/health` readiness endpoint. Cleartext is disabled by default and is permitted only for `127.0.0.1` and `localhost` in the network security configuration.
+
+The embedded server must remain loopback-only. This token protects against unrelated local apps calling the API without the token; it does not protect against a rooted device, malicious code running with SKYWA's UID, or a compromised SKYWA process. The token file is app-private but is not currently encrypted with Android Keystore. The saved AI API key in `data/users.json` is also still plaintext at rest, although the file is private to the app and the settings endpoint never returns the key value.
+
+### Android Keystore evaluation
+
+Keystore-backed encryption is recommended before a production release. The main design constraint is that the AI provider currently runs in Node.js and needs the plaintext key to build the outbound Authorization header. Simply encrypting the JSON field in Java would break provider requests unless decryption is bridged into the runtime. A safe implementation should use an Android Keystore AES-GCM key, versioned ciphertext metadata, and a Java/JNI boundary for encrypt/decrypt or move provider calls into a Java-owned component. Migration must preserve existing API keys, never log them, and roll back safely if decrypting a prior value fails. This migration is not included in this patch to avoid risking loss of user-saved keys; until implemented, API keys are protected by Android app-private storage permissions, not encryption at rest.
+
+## Versioning and release artifacts
+
+`app/build.gradle` is the single source of truth for Android `versionName` and `versionCode`. The runtime preparation script copies these into the embedded bundle so `/api/build` reports the version actually associated with the APK. CI artifact names contain both version and commit SHA, and APK verification checks the app version, code, ARM64-only native ABI, runtime libraries, and embedded server/engine files. The `apk-downloads` branch is published only after a push to `release/v1.7`; ordinary bug-fix branches never trigger that publishing job.
