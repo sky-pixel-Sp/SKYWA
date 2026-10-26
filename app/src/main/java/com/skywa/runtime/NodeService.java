@@ -75,6 +75,7 @@ public final class NodeService extends Service {
             }
 
             prepareRuntimeBundle(runtimeRoot);
+            deleteDiagnostic();
             updateNotification("Runtime Node.js tertanam aktif • menunggu server");
 
             String entryPoint = new File(runtimeRoot, "apps/server/src/runner/server.js").getAbsolutePath();
@@ -88,8 +89,13 @@ public final class NodeService extends Service {
                     apiToken);
             runtimeStartedInProcess = false;
             Log.e(TAG, "Embedded Node.js exited with code " + result);
-            saveDiagnostic("Node.js keluar dengan kode " + result + "\nPeriksa argumen runtime, port, dan log perangkat.");
-            updateNotification("Runtime berhenti (kode " + result + ") • buka SKYWA untuk diagnostik");
+            String diagnostic = result == 70
+                    ? "Runtime berhenti karena kesalahan JavaScript fatal (kode 70). Periksa data/runtime-crash.log; rahasia dan nomor tidak dicatat."
+                    : result == 98
+                    ? "Port server sudah digunakan (EADDRINUSE, kode 98). Hentikan runtime SKYWA lain lalu coba lagi."
+                    : "Node.js keluar dengan kode " + result + ". Periksa konfigurasi runtime dan log perangkat.";
+            saveDiagnostic(diagnostic);
+            updateNotification(result == 70 ? "Runtime crash (70) • buka diagnostik" : result == 98 ? "Port dipakai (98) • buka diagnostik" : "Runtime berhenti (kode " + result + ") • buka SKYWA untuk diagnostik");
         } catch (Throwable error) {
             runtimeStartedInProcess = false;
             Log.e(TAG, "Embedded Node.js could not start", error);
@@ -98,7 +104,7 @@ public final class NodeService extends Service {
         }
     }
 
-    private void saveDiagnostic(Throwable error) {
+    private void deleteDiagnostic() {\n        File file = new File(getFilesDir(), DIAGNOSTIC_FILE);\n        if (file.exists() && !file.delete()) Log.w(TAG, "Could not clear old runtime diagnostic");\n    }\n\n    private void saveDiagnostic(Throwable error) {
         StringBuilder report = new StringBuilder(error.getClass().getName())
                 .append(": ").append(String.valueOf(error.getMessage())).append('\n');
         for (StackTraceElement frame : error.getStackTrace()) report.append(" at ").append(frame).append('\n');
