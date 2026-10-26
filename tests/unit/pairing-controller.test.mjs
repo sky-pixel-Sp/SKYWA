@@ -52,3 +52,21 @@ test('retry boundary stops unregistered pairing after configured limit',()=>{
 test('515 while unregistered is an immediate restart, not a failure',()=>{
  assert.deepEqual(decideAfterClose({statusCode:515,registeredNow:false,retries:0}),{action:'reconnect-immediately',stage:'menunggu-socket'});
 });
+
+
+test('fake socket lifecycle: QR, code ready, registered credentials, then 515 close', async()=>{
+ const socket=fakeSocket();
+ socket.authState={creds:{registered:false}};
+ const stages=[], codes=[];
+ const controller=createPairingController({socket,phoneNumber:'6281234567890',onCode:c=>codes.push(c),onStage:s=>stages.push(s)});
+ socket.ev.emit('connection.update',{qr:'registration-ready'});
+ await new Promise(r=>setImmediate(r));
+ assert.deepEqual(codes,['ABCD-1234']);
+ assert.equal(stages.at(-1),'menunggu-konfirmasi');
+ socket.authState.creds.registered=true;
+ socket.ev.emit('connection.update',{connection:'close',lastDisconnect:{error:{output:{statusCode:515}}}});
+ const closeDecision=decideAfterClose({statusCode:515,registeredNow:socket.authState.creds.registered,retries:0,maxRetries:10,maxPairingRetries:3});
+ assert.deepEqual(closeDecision,{action:'reconnect-immediately',stage:'menyelesaikan-penautan'});
+ assert.notEqual(stages.at(-1),'gagal');
+ controller.dispose();
+});
