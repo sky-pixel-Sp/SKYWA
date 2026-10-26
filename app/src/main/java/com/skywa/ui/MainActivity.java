@@ -67,6 +67,8 @@ public class MainActivity extends Activity {
     private TextView controllerStatus;
     private TextView whatsappStatus;
     private TextView pairingInfo;
+    private TextView pairingHistoryInfo;
+    private String lastWhatsAppDiagnostic = "Belum ada riwayat koneksi WhatsApp.";
     private TextView actionStatus;
     private EditText phoneInput;
     private EditText recipientInput;
@@ -163,11 +165,14 @@ public class MainActivity extends Activity {
         addText(activeSection, "Hubungkan akun WhatsApp kamu dan uji pesan di sini.", 13, MUTED, false);
         LinearLayout connectCard = addCard("STATUS & PAIRING");
         whatsappStatus = addText(connectCard, "WhatsApp: belum diperiksa", 15, WHITE, true);
-        pairingInfo = addText(connectCard, "Kode pairing akan muncul setelah kamu meminta pairing.", 13, MUTED, false);
+        pairingInfo = addText(connectCard, "Menyiapkan koneksi…", 20, WHITE, true);
         addText(connectCard, "Masukkan nomor dalam format internasional tanpa tanda +. Contoh Indonesia: 6281234567890.", 13, MUTED, false);
         phoneInput = addInput(connectCard, "Nomor WhatsApp (contoh 62812…)", false);
         phoneInput.setInputType(3);
         addButton(connectCard, "MINTA KODE PAIRING", ACCENT, this::startWhatsApp);
+        addButton(connectCard, "SALIN KODE", 0xFF34425C, this::copyPairingCode);
+        addButton(connectCard, "ATUR ULANG SESI PAIRING", 0xFF7D3440, this::confirmResetPairingSession);
+        pairingHistoryInfo = addText(connectCard, "Riwayat koneksi akan muncul di sini.", 11, MUTED, false);
         addText(connectCard, "Di WhatsApp, buka Perangkat tertaut → Tautkan perangkat → Tautkan dengan nomor telepon, lalu masukkan kode yang tampil.", 12, MUTED, false);
         addButton(connectCard, "HENTIKAN KONEKSI (SESI TETAP DISIMPAN)", 0xFF34425C, this::stopWhatsApp);
 
@@ -693,6 +698,7 @@ public class MainActivity extends Activity {
             return;
         }
         String phone = digits(phoneInput.getText().toString());
+        if (phone.startsWith("08")) phone = "62" + phone.substring(1);
         if (phone.length() < 10 || phone.length() > 15) {
             actionStatus.setText("Masukkan nomor internasional yang valid, misalnya 6281234567890.");
             actionStatus.setTextColor(RED);
@@ -707,7 +713,30 @@ public class MainActivity extends Activity {
             return;
         }
         actionStatus.setTextColor(MUTED);
-        performAction("POST", "/api/whatsapp/start", body, "Meminta kode pairing");
+        pairingInfo.setText("Menyiapkan koneksi…");
+        performAction("POST", "/api/whatsapp/start", body, "Permintaan dikirim, menunggu kode");
+    }
+
+
+    private void copyPairingCode() {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("[A-Z0-9]{4}-[A-Z0-9]{4}").matcher(pairingInfo.getText().toString());
+        if (!matcher.find()) {
+            actionStatus.setText("Kode belum tersedia. Tunggu hingga kode pairing muncul.");
+            actionStatus.setTextColor(MUTED);
+            return;
+        }
+        android.content.ClipboardManager clipboard = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (clipboard != null) clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Kode pairing SKYWA", matcher.group()));
+        actionStatus.setText("Kode pairing disalin.");
+        actionStatus.setTextColor(GREEN);
+    }
+
+    private void confirmResetPairingSession() {
+        new AlertDialog.Builder(this).setTitle("Atur ulang sesi pairing?")
+            .setMessage("Sesi belum terdaftar akan diarsipkan. Sesi yang sudah terdaftar tidak akan disentuh.")
+            .setNegativeButton("BATAL", (dialog, which) -> dialog.dismiss())
+            .setPositiveButton("ATUR ULANG", (dialog, which) -> performAction("POST", "/api/whatsapp/pairing/reset", new JSONObject(), "Mengatur ulang sesi pairing"))
+            .show();
     }
 
     private void stopWhatsApp() {
@@ -1018,14 +1047,16 @@ public class MainActivity extends Activity {
                         } else {
                             boolean connected = finalWhatsapp.optBoolean("connected", false);
                             String state = finalWhatsapp.optString("state", "unknown");
-                            whatsappStatus.setText("WhatsApp: " + (connected ? "TERHUBUNG" : state));
+                            whatsappStatus.setText("WhatsApp: " + (connected ? "Terhubung" : state));
                             whatsappStatus.setTextColor(connected ? GREEN : WHITE);
                             homeWhatsAppStatus.setText("WhatsApp • " + (connected ? "TERHUBUNG" : "BELUM TERHUBUNG"));
                             homeWhatsAppStatus.setTextColor(connected ? GREEN : MUTED);
+                            lastWhatsAppDiagnostic = finalWhatsapp.toString();
                             String code = finalWhatsapp.optString("pairing", "");
                             String qr = finalWhatsapp.optString("qr", "");
                             if (!code.isEmpty()) {
-                                pairingInfo.setText("KODE PAIRING: " + code + "\nMasukkan kode tersebut di WhatsApp pada menu Perangkat tertaut.");
+                                pairingInfo.setTextSize(24);
+                                pairingInfo.setText("KODE PAIRING\n" + code + "\nWhatsApp → Perangkat tertaut → Tautkan perangkat → Tautkan dengan nomor telepon.");
                                 pairingInfo.setTextColor(GREEN);
                             } else if (!qr.isEmpty()) {
                                 pairingInfo.setText("QR pairing tersedia di backend. Untuk kode yang mudah dipakai di ponsel ini, masukkan nomor di atas lalu pilih Minta Kode Pairing.");
