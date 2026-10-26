@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
-import {createPairingController, isContaminatedUnregisteredSession, quarantineUnregisteredSession, safeDisconnectSummary} from '../../packages/whatsapp-engine/src/pairing-controller.js';
+import {createPairingController, decideAfterClose, isContaminatedUnregisteredSession, quarantineUnregisteredSession, safeDisconnectSummary} from '../../packages/whatsapp-engine/src/pairing-controller.js';
 
 function fakeSocket() {
  const ev = new EventEmitter(); let calls=0;
@@ -37,4 +37,18 @@ test('quarantines unregistered session including creds.me without deleting it',a
 test('disconnect summary retains status and safe reason',()=>{
  const summary=safeDisconnectSummary({output:{statusCode:401},message:'logged out from +6281234567890'},123);
  assert.equal(summary.statusCode,401); assert.equal(summary.at,123); assert.match(summary.reason,/nomor disamarkan/);
+});
+
+test('515 after credentials register reconnects immediately without failed stage',()=>{
+ const result=decideAfterClose({statusCode:515,registeredNow:true,retries:0,maxRetries:10,maxPairingRetries:3});
+ assert.deepEqual(result,{action:'reconnect-immediately',stage:'menyelesaikan-penautan'});
+});
+test('401 stops reconnect attempts',()=>{
+ assert.equal(decideAfterClose({statusCode:401,registeredNow:false,retries:0}).action,'stop');
+});
+test('retry boundary stops unregistered pairing after configured limit',()=>{
+ assert.equal(decideAfterClose({statusCode:500,registeredNow:false,retries:3,maxRetries:10,maxPairingRetries:3}).action,'stop');
+});
+test('515 while unregistered is an immediate restart, not a failure',()=>{
+ assert.deepEqual(decideAfterClose({statusCode:515,registeredNow:false,retries:0}),{action:'reconnect-immediately',stage:'menunggu-socket'});
 });
