@@ -1,4 +1,4 @@
-import {startWhatsApp,stopWhatsApp,getSock,getCurrentState,isConnected,getQRCode,getPairingCode} from '../../../../packages/whatsapp-engine/src/engine.js';
+import {startWhatsApp,stopWhatsApp,getSock,getCurrentState,isConnected,getQRCode,getPairingCode,getPairingDiagnostics,resetPairingDiagnostics} from '../../../../packages/whatsapp-engine/src/engine.js';
 import {createSerialExecutor} from './serial-operations.js';
 
 let controllerState='stopped',lastError=null,startTime=null;
@@ -41,5 +41,10 @@ export function getHealth() {
   return {controller:controllerState,whatsapp:getCurrentState(),connected:isConnected(),sockExists:getSock()!==null,startTime,uptimeSec:startTime?Math.round((Date.now()-startTime)/1000):0,lastError};
 }
 export function getWhatsAppStatus() {
-  return {state:getCurrentState(),connected:isConnected(),qr:getQRCode(),pairing:getPairingCode(),sessionId:'main'};
+  return {state:getCurrentState(),connected:isConnected(),qr:getQRCode(),pairing:getPairingCode(),sessionId:'main', ...getPairingDiagnostics()};
+}
+export async function resetUnregisteredPairingSession() {
+  await stopRuntimeNow();
+  resetPairingDiagnostics();
+  return startRuntimeNow({});
 }
