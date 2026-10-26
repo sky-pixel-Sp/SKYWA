@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
-import {createPairingController, decideAfterClose, isContaminatedUnregisteredSession, quarantineUnregisteredSession, safeDisconnectSummary} from '../../packages/whatsapp-engine/src/pairing-controller.js';
+import {createPairingController, decideAfterClose, isContaminatedUnregisteredSession, quarantineUnregisteredSession, safeDisconnectSummary, normalizePairingPhoneNumber, assertPairingResetAllowed} from '../../packages/whatsapp-engine/src/pairing-controller.js';
 
 function fakeSocket() {
  const ev = new EventEmitter(); let calls=0;
@@ -69,4 +69,15 @@ test('fake socket lifecycle: QR, code ready, registered credentials, then 515 cl
  assert.deepEqual(closeDecision,{action:'reconnect-immediately',stage:'menyelesaikan-penautan'});
  assert.notEqual(stages.at(-1),'gagal');
  controller.dispose();
+});
+
+
+test('pairing phone normalization accepts common separators and rejects malformed input',()=>{
+ assert.equal(normalizePairingPhoneNumber(' +62 (812) 3456-7890 '),'6281234567890');
+ assert.throws(()=>normalizePairingPhoneNumber('62812ABC'),/10–15 digit/);
+});
+test('registered credentials block pairing reset without changing the session',()=>{
+ assert.throws(()=>assertPairingResetAllowed({registered:true}),/sudah terdaftar/);
+ assert.equal(assertPairingResetAllowed({registered:false}),true);
+ assert.equal(assertPairingResetAllowed(null),true);
 });
